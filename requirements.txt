@@ -1,0 +1,6 @@
+numpy
+torch
+torchvision
+opencv-python>=4.5.4
+slideio==2.4.1
+scipy
