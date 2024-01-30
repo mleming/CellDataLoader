@@ -2,7 +2,7 @@
 import unittest
 import os,sys,time
 
-#from src.cell_loader_MLEMING import *
+#from src.cell_data_loader import *
 import os,sys,time
 import numpy as np
 import torch
@@ -15,7 +15,7 @@ imfolder2  = os.path.join(im_root,'3368914_4_non_tumor')
 imfolder3  = os.path.join(im_root,'H6-13_Mars1+dapi')
 
 sys.path.insert(0,os.path.join(wd))
-from src.cell_loader_MLEMING import *
+from src.cell_data_loader import *
 
 class TestSimple(unittest.TestCase):
 	
