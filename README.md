@@ -91,6 +91,12 @@ dataloader = CellDataloader(imfolder,
 Dependencies
 ------------
 
+Note that the strict dependencies are automatically downloaded just with
+
+	pip install cell-data-loader
+
+However, to get support with cell-segmentation-specific images (i.e., segment="cell"), [CellPose](https://github.com/MouseLand/cellpose) needs to be installed. GPU integration with CellPose would also need to be handled separately.
+
 Strict dependencies:
 
 	numpy
@@ -107,8 +113,3 @@ Soft dependencies:
 	CellPose # For cell segmentation support
 	Tensorflow
 
-Note that some of the dependencies are not strict and vary depending on usage. Numpy is a hard requirement, but Tensorflow is not if the user only uses the Torch capabilities. If the user attempts to load cell images in "cell" mode without a working Cellpose installation, CellDataLoader will throw an error. Cellpose needs be be installed separately to use "cell" mode:
-
-	pip install cellpose
-
-And GPU integration for Cellpose would need to be handled separately.
