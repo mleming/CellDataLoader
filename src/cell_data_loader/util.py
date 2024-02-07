@@ -1,9 +1,7 @@
 #!/usr/bin/python
 
 import os,sys,json,csv,cv2,glob,random,re
-import xml.etree.ElementTree as ET
 import numpy as np
-import pickle
 from numpy.random import choice,shuffle
 from math import floor,ceil,sqrt
 from PIL import Image,ImageEnhance
@@ -18,28 +16,11 @@ import warnings
 try:
 	from cellpose import models, io
 except:
-	warnings.warn("""
-		Working Cellpose not installed -- cell segmentation not possible
-	""")
-#from deepcell.applications import CytoplasmSegmentation
-#import numpy as np
-#from PIL import Image
-#from shutil import copyfile
-#from model import *
-#from scipy import ndimage
-import skimage
-#import itertools
-#import torch
-#import skimage.measure
-#from torchvision import transforms
+	warnings.warn("Working Cellpose not installed -- cell segmentation not"+\
+	" possible")
 
+import skimage
 # DEFINE CELLPOSE MODEL
-# model_type='cyto' or model_type='nuclei'
-imagename = '/home/mleming/Desktop/Malaria_Cell_Project/data/AI_DATA_SET_UNZIPPED/TE201016063147_Mal_Cls2_201019/0258_21100_54800_005_23368.jpg'
-#imagename = '/home/mleming/Desktop/Malaria_Cell_Project/data/new_update_011421_UNZIPPED/TE201231032353/0533.jpg'
-#imagename = '/home/mleming/Desktop/Malaria_Cell_Project/data/new_update_011421_UNZIPPED/M2009090043/0833.jpg'
-imagename = '/home/mleming/Desktop/Malaria_Cell_Project/data/AI_DATA_SET_UNZIPPED/M2009091344/0583.jpg'
-imagename = '/home/mleming/Desktop/Malaria_Cell_Project/data/AI_DATA_SET_UNZIPPED/TE201231032353/0509.jpg'
 
 @contextmanager
 def suppress_stdout():
@@ -178,7 +159,8 @@ def slice_and_augment(im,x,y,l,w,
 	#new_image = PIL.ImageEnhance.Contrast(image).enhance(1.2)
 	if out_size is not None:
 		if dtype == "torch":
-			imslice = torch.permute(torchvision.transforms.Resize(out_size)(torch.permute(imslice,(2,0,1))),(1,2,0))
+			imslice = torch.permute(torchvision.transforms.Resize(
+				out_size)(torch.permute(imslice,(2,0,1))),(1,2,0))
 		elif dtype == "numpy":
 			imslice = cv2.resize(imslice,out_size[::-1])
 	return imslice
@@ -338,8 +320,8 @@ def remove_unsmooth(mask,thresh=25):
 	elif len(mask.shape) == 3:
 		for z in range(mask.shape[2]):			
 			smoothnesses[z] = get_smoothness(crop2(np.squeeze(mask[:,:,z])))
-	max_smoothness = smoothnesses.max()#max([smoothnesses[s] for s in smoothnesses])
-	min_smoothness = smoothnesses.min()#min([smoothnesses[s] for s in smoothnesses])
+	max_smoothness = smoothnesses.max()
+	min_smoothness = smoothnesses.min()
 	for i in range(mask.max()):
 		if smoothnesses[i] > thresh:
 			mask[mask == i+1] = 0

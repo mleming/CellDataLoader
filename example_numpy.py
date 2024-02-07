@@ -1,16 +1,23 @@
 #!/usr/bin/python3
 
-from src.cell_loader_MLEMING import CellDataloader
+from src.cell_data_loader import CellDataloader
 from keras import tensorflow as tf
 import numpy
 import os
 
-def example_numpy():
-	wd = os.path.dirname(os.path.realpath(__file__))
-	imfolder_test = os.path.join(wd,'data','3368914_4_non_tumor')
-	imfolder_train = os.path.join(wd,'data','4173633_5')
-	model = resnet50()
+def example_numpy(verbose=True):
 
+	"""
+	Replace whese with folders locally on your computer -- script will not work
+	without new folders.
+	"""
+	wd = os.path.dirname(os.path.realpath(__file__))
+	imfolder_test = os.path.join(wd,'data',
+		'3368914_4_non_tumor')
+	imfolder_train = os.path.join(wd,'data',
+		'4173633_5')
+
+	model = resnet50()
 	model = tf.keras.applications.resnet50.ResNet50(
 		include_top=True,
 		weights='imagenet',
@@ -36,7 +43,6 @@ def example_numpy():
 	# Test
 
 	model.eval()
-
 	dataloader_test = CellDataloader(imfolder_test,imfolder_train,dtype="torch",
 		verbose=False)
 	total_images = 0
@@ -48,7 +54,7 @@ def example_numpy():
 			torch.argmax(y,axis=1))
 
 	accuracy = sum_accuracy / total_images
-	#print("Final accuracy: %.4f" % sum_accuracy)
+	if verbose: print("Final accuracy: %.4f" % sum_accuracy)
 
 if __name__ == "__main__":
 	example_numpy()

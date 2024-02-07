@@ -174,9 +174,9 @@ class ImageLabelObject(BaseDataset):
 			return imslice
 		elif self.mode == "cell":
 			if len(self.get_cell_box_label()) == 0:
-				print("len self: %d" % len(self))
+				#print("len self: %d" % len(self))
 				return -1
-				raise Exception("No cells in this image — should not call")
+				#raise Exception("No cells in this image — should not call")
 				#warnings.warn("No cells found in %s" % self.filename)
 				#return -1
 			index = index % len(self.get_cell_box_label())
@@ -283,10 +283,8 @@ class CellDataloader():#BaseDataset):
 			try:
 				from cellpose import models,io
 			except:
-				raise Exception("""
-					Cellpose import failed -- need valid cellpose version to use
-					cell segmentation option.
-				""")
+				raise Exception("Cellpose import failed -- need valid "+\
+					"cellpose version to use cell segmentation option.")
 			if self.cell_box_regex is not None:
 				assert(len(all_filename_lists) == 1)
 				self.cell_box_regex = re.compile(self.cell_box_regex)
@@ -294,13 +292,11 @@ class CellDataloader():#BaseDataset):
 			elif self.cell_box_filelist is not None:
 				assert(len(all_filename_lists) == 1)
 				if self.image_folders is not None:
-					raise Exception("""
-						To input cell boxes, files must be input individually
-						as a list and not as a folder, to ensure one-to-one
-						correspondence between the box file and the image. Use
-						the filelists parameter instead of the image_folders
-						parameter
-					""")
+					raise Exception(" To input cell boxes, files must be "+\
+						"input individually as a list and not as a folder, "+\
+						"to ensure one-to-one correspondence between the "+\
+						"box file and the image. Use the filelists parameter "+\
+						"instead of the image_folders parameter")
 				if isinstance(self.cell_box_filelist,str): # One image
 					self.cell_box_filelist = [[self.cell_box_filelist]]
 				elif isinstance(self.cell_box_filelist,list):
@@ -312,9 +308,8 @@ class CellDataloader():#BaseDataset):
 						assert(len(all_filenames_list[i]) == len(l))
 						for filename in l:
 							if not os.path.isfile(filename):
-								raise Exception("""
-									File doesn't exist: %s
-								""" % filename)
+								raise Exception(
+									"File doesn't exist: %s" % filename)
 				self.label_input_format = "Cell_Box_Filelist"
 		
 		"""
@@ -364,7 +359,8 @@ class CellDataloader():#BaseDataset):
 			if self.dtype == "numpy":
 				self.label_batch = np.zeros((self.batch_size,self.n_labels))
 			elif self.dtype == "torch":
-				self.label_batch = torch.zeros(self.batch_size,self.n_labels)
+				self.label_batch = torch.zeros(self.batch_size,self.n_labels,
+					device = self.gpu_ids)
 		sample = self.image_objects[0]
 		if n_channels is None:
 			self.n_channels = sample.get_n_channels()
@@ -420,9 +416,9 @@ class CellDataloader():#BaseDataset):
 			for i,reg in enumerate(self.label_regex):
 				if bool(reg.search(image_file)):
 					if m > 0:
-						warnings.warn("""
-						Image file %s matches at least two regular expressions
-						""" % image_file)
+						warnings.warn(
+							("Image file %s matches at"+\
+							" least two regular expressions") % image_file)
 					m = i + 1
 			return m
 		else:
@@ -507,20 +503,3 @@ class CellDataloader():#BaseDataset):
 			return b,self.label_batch
 		else:
 			return b
-
-if __name__ == "__main__":
-	wd = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-	imfolder = '/home/mleming/Dropbox (Partners HealthCare)/9. DROSE'
-	dataset = CellDataloader(
-				[
-					os.path.join(imfolder,'raw_Test'),
-					os.path.join(imfolder,'raw_Train, Val')
-				],
-				segment_image = "whole")
-	#dataset = CellDataloader(imfolder,label_regex=["Test","Train"])
-	
-	for i,(x,y) in enumerate(dataset):
-		print(sys.getsizeof(x))
-		#print(i.label)
-		#print(i.filename)
-

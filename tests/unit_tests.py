@@ -13,7 +13,6 @@ im_root    = os.path.join(wd,'data')
 imfolder1  = os.path.join(im_root,'4173633_5')
 imfolder2  = os.path.join(im_root,'3368914_4_non_tumor')
 imfolder3  = os.path.join(im_root,'H6-13_Mars1+dapi')
-
 sys.path.insert(0,os.path.join(wd))
 from src.cell_data_loader import *
 
@@ -152,6 +151,29 @@ class TestSimple(unittest.TestCase):
 			counts[int(np.argmax(y))] += 1
 		self.assertEqual(counts[0],counts[1])
 		self.assertEqual(counts[1],counts[2])
+	def test_gpu(self):
+		batch_size = 5
+		dim = (6,7)
+		for dtype in ["torch","numpy"]:
+			if dtype == "torch":
+				if not torch.cuda.is_available():
+					print("No available GPU for torch -- skipping")
+					continue
+				device = torch.cuda.current_device()
+			elif dtype == "numpy":
+				continue
+			dataset = CellDataloader(imfolder1,imfolder2,imfolder3,dim=dim,
+				batch_size=batch_size,dtype=dtype,match_labels=True,
+				gpu_ids = device)
+			for x,y in dataset:
+				if dtype == "torch":
+					self.assertEquals(device,x.device.index)
+					self.assertEquals(device,y.device.index)
+					break
+				elif dtype == "numpy":
+					break
+				else:
+					break
 
 if __name__ == "__main__":
 	unittest.main()
