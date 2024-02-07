@@ -78,10 +78,11 @@ imfolder = '/path/to/folder'
 
 dataloader = CellDataloader(imfolder,
 			dim = (64,64),
-			batch_size = 32,
-			dtype = "numpy", # Can also be "torch"
+			batch_size = 64,
+			dtype = "torch", # Can also be "numpy"
 			label_regex = None,
-			segment_image = "whole", # "Whole" outputs the whole image, resized
+			verbose = True,
+			segment_image = "whole", # "whole" outputs the whole image, resized
 				# to dim; "sliced" cuts the image checkerboard pattern into
 				# dim-shaped outputs, so it's suitable for large images; "cell"
 				# segments cells from the image using CellPose, though it throws
@@ -92,9 +93,11 @@ dataloader = CellDataloader(imfolder,
 				# images to force this number of channels
 			augment_image = True, # Augments the output image in the standard
 				# ways -- rotation, color jiggling, etc.
-			match_labels = False, # If true, outputs proportional amounts of 
-				# each label in the dataset
-			gpu_ids = None # GPUs that the outputs are read to, if present.
+			label_balance = True, # Outputs proportional amounts of each label
+				# in the dataset
+			gpu_ids = None, # GPUs that the outputs are read to, if present.
+			channels_first = True # Places channels either first, before the
+				# batch dimension, or last
 			)
 ~~~
 
