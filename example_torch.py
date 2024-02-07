@@ -7,10 +7,6 @@ import os
 
 def example_torch(gpu_ids = None,verbose=True):
 
-	"""
-	Replace whese with folders locally on your computer -- script will not work
-	without new folders.
-	"""
 	wd = os.path.dirname(os.path.realpath(__file__))
 	imfolder_test = os.path.join(wd,'data',
 		'3368914_4_non_tumor')
