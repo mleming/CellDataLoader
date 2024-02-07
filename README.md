@@ -81,8 +81,19 @@ dataloader = CellDataloader(imfolder,
 			batch_size = 32,
 			dtype = "numpy", # Can also be "torch"
 			label_regex = None,
-			n_channels = 3, # Detected in first image by default; re-samples all images to force this number of channels
-			match_labels = False, # If true, outputs proportional amounts of each label in the dataset
+			segment_image = "whole", # "Whole" outputs the whole image, resized
+				# to dim; "sliced" cuts the image checkerboard pattern into
+				# dim-shaped outputs, so it's suitable for large images; "cell"
+				# segments cells from the image using CellPose, though it throws
+				# an error if CellPose is not installed properly. CellPose is
+				# not included by default in the dependencies and needs to be
+				# installed separately by the user.
+			n_channels = 3, # Detected in first image by default; re-samples all
+				# images to force this number of channels
+			augment_image = True, # Augments the output image in the standard
+				# ways -- rotation, color jiggling, etc.
+			match_labels = False, # If true, outputs proportional amounts of 
+				# each label in the dataset
 			gpu_ids = None # GPUs that the outputs are read to, if present.
 			)
 ~~~
