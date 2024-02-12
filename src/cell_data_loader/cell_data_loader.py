@@ -202,7 +202,6 @@ class CellDataloader():#BaseDataset):
 		label_balance = True,
 		cell_box_regex = None,
 		cell_box_filelist = None,
-		filelists = None,
 		n_channels = None,
 		channels_first = True,
 		match_labels=False):
@@ -486,12 +485,16 @@ class CellDataloader():#BaseDataset):
 					im = self.next_im()
 			assert(not isinstance(im,int))
 			if self.dtype == "torch":
+				if len(im.size()) == 2 and self.n_channels == 1:
+					im = torch.unsqueeze(im,2)
 				self.batch[i,...] = torch.unsqueeze(im,0)
 				if self.channels_first:
 					b = torch.moveaxis(self.batch,-1,1)
 				else:
 					b = self.batch
 			elif self.dtype == "numpy":
+				if len(im.shape) == 2 and self.n_channels == 1:
+					im = np.expand_dims(im,axis=2)
 				self.batch[i,...] = np.expand_dims(im,axis=0)
 				if self.channels_first:
 					b = np.moveaxis(self.batch,-1,1)

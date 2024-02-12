@@ -7,10 +7,15 @@ import os
 
 def example_torch(gpu_ids = None,verbose=True):
 
+	"""
+	Replace these folders with whatever folders of cells you may have. Note that
+	the test/train folders in this script are the same -- you would need to 
+	have a separate train/test set in your own implementation
+	"""
 	wd = os.path.dirname(os.path.realpath(__file__))
-	imfolder_test = os.path.join(wd,'data',
+	imfolder1 = os.path.join(wd,'data',
 		'3368914_4_non_tumor')
-	imfolder_train = os.path.join(wd,'data',
+	imfolder2 = os.path.join(wd,'data',
 		'4173633_5')
 
 	# Get a model from torchvision
@@ -25,17 +30,14 @@ def example_torch(gpu_ids = None,verbose=True):
 	model.train()
 	loss_fn = torch.nn.MSELoss(reduction='sum')
 	optimizer = torch.optim.Adam(model.parameters(), lr=1e-5)
-	dataloader_train = CellDataloader(imfolder_train,imfolder_test,
+	dataloader_train = CellDataloader(imfolder1,imfolder2,
 		dtype="torch",
 		verbose=False, gpu_ids=gpu_ids)
 
 	for epoch in range(100):
 		for image,y in dataloader_train:
-			#print("image.size(): %s" % str(image.size()))
-			#print("y.size(): %s" % str(y.size()))
 			y_pred = model(image)
-			y_pred = y_pred[:,:2]
-			#print("y_pred.size(): %s" % str(y_pred.size()))
+			y_pred = y_pred[:,:y.size()[1]]
 			loss = loss_fn(y_pred, y)
 			optimizer.zero_grad()
 			loss.backward()
@@ -44,7 +46,7 @@ def example_torch(gpu_ids = None,verbose=True):
 	# Test
 
 	model.eval()
-	dataloader_test = CellDataloader(imfolder_test,imfolder_train,dtype="torch",
+	dataloader_test = CellDataloader(imfolder1,imfolder2,dtype="torch",
 		verbose=False, gpu_ids = gpu_ids)
 	total_images = 0
 	sum_accuracy = 0
@@ -58,4 +60,4 @@ def example_torch(gpu_ids = None,verbose=True):
 	if verbose: print("Final accuracy: %.4f" % sum_accuracy)
 
 if __name__ == "__main__":
-	example_torc:h()
+	example_torch()

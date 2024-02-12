@@ -167,8 +167,8 @@ class TestSimple(unittest.TestCase):
 				gpu_ids = device)
 			for x,y in dataset:
 				if dtype == "torch":
-					self.assertEquals(device,x.device.index)
-					self.assertEquals(device,y.device.index)
+					self.assertEqual(device,x.device.index)
+					self.assertEqual(device,y.device.index)
 					break
 				elif dtype == "numpy":
 					break
