@@ -1,0 +1,39 @@
+[project]
+
+name = "cell_data_loader"
+
+version = "0.0.3"
+
+dependencies = [
+  "numpy",
+  "scipy",
+  "torch",
+  "torchvision",
+  "opencv-python>=4.5.4",
+  "slideio==2.4.1",
+  "scikit-image",
+  "pillow"
+]
+requires-python = ">=3.8"
+
+authors = [
+  {name = "Matt Leming", email = "mleming@mgh.harvard.edu"}
+]
+maintainers = [
+  {name = "Matt Leming", email = "mleming@mgh.harvard.edu"}
+]
+
+description = "Converts general images of cells into formats and labels for deep learning pipelines"
+
+readme = {file = "README.md", content-type="text/markdown"}
+
+license = {text = "MIT License"}
+
+keywords = ["cell", "biomedical", "cellpose", "cell image", "csz", "dataloader"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project.urls]
+Homepage = "https://github.com/mleming/CellDataLoader"
