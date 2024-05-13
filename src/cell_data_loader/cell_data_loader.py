@@ -12,6 +12,7 @@ from scipy.ndimage.interpolation import map_coordinates
 from scipy.ndimage.filters import gaussian_filter
 from .base_dataset import BaseDataset
 import torch,torchvision
+torchvision.disable_beta_transforms_warning()
 from .util import *
 import warnings
 
@@ -204,7 +205,8 @@ class CellDataloader():#BaseDataset):
 		cell_box_filelist = None,
 		n_channels = None,
 		channels_first = True,
-		match_labels=False):
+		match_labels=False,
+		normalize=True):
 		
 		self.verbose = verbose
 		self.label_balance = label_balance
@@ -220,6 +222,21 @@ class CellDataloader():#BaseDataset):
 		self.dtype = dtype
 		self.n_channels = n_channels
 		self.channels_first = channels_first
+		self.augment_image = augment_image
+		self.normalize = normalize
+		if self.augment_image and self.dtype == "torch":
+			import torchvision.transforms.v2 as transforms
+			
+			self.augment = transforms.Compose([
+				transforms.RandomHorizontalFlip(0.5),
+				transforms.RandomVerticalFlip(0.5),
+				transforms.GaussianBlur(5),
+				transforms.ColorJitter(brightness=(0.5,1.5),
+					contrast=(1), saturation=(0.5,1.5), hue=(-0.1,0.1)),
+				transforms.RandomResizedCrop(self.dim, antialias=True)])#,
+				#transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))])
+			self.augment2 = transforms.Compose([
+				transforms.ElasticTransform()])
 		"""
 		If true, outputs given labels equally. This may repeat images if the
 		counts of each don't line up.
@@ -358,13 +375,18 @@ class CellDataloader():#BaseDataset):
 			if self.dtype == "numpy":
 				self.label_batch = np.zeros((self.batch_size,self.n_labels))
 			elif self.dtype == "torch":
-				self.label_batch = torch.zeros(self.batch_size,self.n_labels,
+				self.label_batch = torch.zeros((self.batch_size,self.n_labels),
 					device = self.gpu_ids)
 		sample = self.image_objects[0]
 		if n_channels is None:
 			self.n_channels = sample.get_n_channels()
 		else:
 			self.n_channels = n_channels
+		if self.normalize and self.dtype == "torch":
+			from torchvision.transforms.v2 import Normalize
+			self.normalizer = Normalize(
+				tuple([0.5 for _ in range(self.n_channels)]),
+				tuple([0.5 for _ in range(self.n_channels)]))
 		for image_object in self.image_objects:
 			image_object.n_channels = self.n_channels
 		if self.verbose:
@@ -457,6 +479,14 @@ class CellDataloader():#BaseDataset):
 			self.im_index = 0
 			self.index += 1
 			if self.index >= len(self.image_objects): break
+		#if self.augment_image and self.dtype == "torch":
+			#imdim = im.size()
+			#print("imdim: %s" % str(imdim))
+			#im = torch.permute(im,[len(imdim)-1]+list(range(0,len(imdim)-1)))
+			#print("imdim: %s" % str(im.size()))
+			#im = self.augment(im)
+			#im = torch.permute(im,list(range(1,len(imdim))) + [0])
+			#print("imdim: %s"%str(im.size()))
 		if self.return_labels():
 			return im,label
 		else:
@@ -492,6 +522,22 @@ class CellDataloader():#BaseDataset):
 					b = torch.moveaxis(self.batch,-1,1)
 				else:
 					b = self.batch
+				if (self.augment_image and self.n_channels <= 3) or self.normalize:
+					if not self.channels_first:
+						b = torch.permute(b,[0,-1] + list(range(1,len(b.size())-1)))
+					#print("b.size(): %s" % str(b.size()))
+					if self.n_channels <= 3 and self.augment:
+						b = self.augment(b)
+						if self.dim[0] > 32 and self.dim[1] > 32:
+							b = self.augment2(b)
+					#print("b.size(): %s" % str(b.size()))
+					#print([0]+list(range(2,len(b.size()))) + [1])
+					if self.normalize:
+						b = self.normalizer(b)
+					if not self.channels_first:
+						b = torch.permute(b,[0]+list(range(2,len(b.size()))) + [1])
+					#print("b.size(): %s" % str(b.size()))
+					#print("sss")
 			elif self.dtype == "numpy":
 				if len(im.shape) == 2 and self.n_channels == 1:
 					im = np.expand_dims(im,axis=2)

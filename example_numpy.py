@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-
 from src.cell_data_loader import CellDataloader
 
 try:
@@ -10,7 +9,7 @@ except:
 	except:
 		raise Exception("Need valid tensorflow")
 
-import numpy
+import numpy as np
 import os
 
 def example_numpy(verbose=True):
@@ -20,13 +19,13 @@ def example_numpy(verbose=True):
 	the test/train folders in this script are the same -- you would need to 
 	have a separate train/test set in your own implementation
 	"""
-	wd = os.path.dirname(os.path.realpath(__file__))
+	wd = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 	imfolder1 = os.path.join(wd,'data',
 		'3368914_4_non_tumor')
 	imfolder2 = os.path.join(wd,'data',
 		'4173633_5')
 
-	model = resnet50()
+	#model = resnet50()
 	model = tf.keras.applications.resnet50.ResNet50(
 		include_top=True,
 		weights='imagenet',
@@ -42,13 +41,13 @@ def example_numpy(verbose=True):
 		dtype="numpy",verbose=False)
 
 	z = None
-	for epoch in range(100):
+	for epoch in range(1):
 		for image,y in dataloader_train:
 			if z is None:
 				z_dim = list(y.shape)
 				z_dim[1] = 1000 - z_dim[1]
 				z = np.zeros(z_dim)
-			y = np.concatenate(y,z,axis=1)
+			y = np.concatenate((y,z),axis=1)
 			model.fit(image,y)
 
 	# Test

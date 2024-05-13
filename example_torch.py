@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-from cell_data_loader import CellDataloader
+from src.cell_data_loader import CellDataloader
 from torchvision.models import resnet50 #, ResNet50_Weights
 import torch
 import os
@@ -48,7 +48,7 @@ def example_torch(gpu_ids = None,verbose=True):
 		dtype="torch",
 		verbose=False, gpu_ids=gpu_ids)
 	if verbose: print("Beginning training")
-	n_epochs = 500
+	n_epochs = 1
 	for epoch in range(n_epochs):
 		l = 0
 		c = 0
@@ -65,7 +65,7 @@ def example_torch(gpu_ids = None,verbose=True):
 		if verbose:
 			print(
 				"Epoch {epoch:d}/{n_epochs:d}: loss: {loss:.5f}".format(
-					epoch=epoch,n_epochs=e_epochs,loss=l/c)
+					epoch=epoch,n_epochs=n_epochs,loss=l/c)
 			)
 	# Test
 	
