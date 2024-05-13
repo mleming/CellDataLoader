@@ -307,12 +307,6 @@ class CellDataloader():#BaseDataset):
 				self.label_input_format = "Cell_Box_Regex"
 			elif self.cell_box_filelist is not None:
 				assert(len(all_filename_lists) == 1)
-				if self.image_folders is not None:
-					raise Exception(" To input cell boxes, files must be "+\
-						"input individually as a list and not as a folder, "+\
-						"to ensure one-to-one correspondence between the "+\
-						"box file and the image. Use the filelists parameter "+\
-						"instead of the image_folders parameter")
 				if isinstance(self.cell_box_filelist,str): # One image
 					self.cell_box_filelist = [[self.cell_box_filelist]]
 				elif isinstance(self.cell_box_filelist,list):

@@ -66,6 +66,20 @@ for label,image in dataloader:
 	...
 ~~~
 
+Boxes
+-----
+
+In cases where you need to cut out individual cells from an image and have the coordinates file, cell_data_loader.py accepts an argument, cell_box_filelist, which is a list of files corresponding to the inputs that mark out the coordinates of labels on the cells. The format of the csv is as follows:
+
+| X  | Y   | W  | H | Label |
+| -  | -   | -  | - | ----- |
+| 14 | 13  | 5  | 6 | 0     |
+| 20 | 25  | 15 | 5 | 1     |
+
+
+~~~python
+dataloader = CellDataloader('/path/to/file.svs',cell_box_filelist=['/path/to/boxfile.csv'])
+~~~
 
 Arguments
 ---------
