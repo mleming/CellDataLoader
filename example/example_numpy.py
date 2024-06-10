@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-from src.cell_data_loader import CellDataloader
+from cell_data_loader import CellDataloader
 
 try:
 	import tensorflow as tf

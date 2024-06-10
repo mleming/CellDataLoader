@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-from src.cell_data_loader import CellDataloader
+from cell_data_loader import CellDataloader
 from torchvision.models import resnet50 #, ResNet50_Weights
 import torch
 import os
