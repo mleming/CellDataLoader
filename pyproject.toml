@@ -2,13 +2,13 @@
 
 name = "cell_data_loader"
 
-version = "0.0.7"
+version = "0.0.8"
 
 dependencies = [
   "numpy",
   "scipy",
   "torch",
-  "torchvision",
+  "torchvision<=0.15.0",
   "opencv-python>=4.5.4",
   "slideio==2.4.1",
   "scikit-image",
