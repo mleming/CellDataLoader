@@ -2,19 +2,19 @@
 
 name = "cell_data_loader"
 
-version = "0.0.8"
+version = "0.0.10"
 
 dependencies = [
   "numpy",
   "scipy",
-  "torch",
+  "torch<=2.0.0",
   "torchvision<=0.15.0",
   "opencv-python>=4.5.4",
   "slideio==2.4.1",
   "scikit-image",
   "pillow"
 ]
-requires-python = ">=3.8"
+requires-python = "==3.8"
 
 authors = [
   {name = "Matt Leming", email = "mleming@mgh.harvard.edu"}
