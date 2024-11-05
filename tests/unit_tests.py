@@ -139,7 +139,7 @@ class TestSimple(unittest.TestCase):
 			print("Torch import failed -- skipping test")
 			valid_torch = False
 		if valid_torch:
-			from example_torch import example_torch
+			from example.example_torch import example_torch
 			example_torch()
 	def test_label_match(self):
 		batch_size = 1
