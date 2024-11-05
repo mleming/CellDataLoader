@@ -2,7 +2,7 @@
 
 name = "cell_data_loader"
 
-version = "0.0.13"
+version = "0.0.14"
 
 dependencies = [
   "numpy",
@@ -14,7 +14,7 @@ dependencies = [
   "scikit-image",
   "pillow"
 ]
-requires-python = "=>3.8"
+requires-python = ">=3.8"
 
 authors = [
   {name = "Matt Leming", email = "mleming@mgh.harvard.edu"}
