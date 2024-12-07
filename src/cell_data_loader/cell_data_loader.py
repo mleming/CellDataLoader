@@ -281,7 +281,7 @@ class CellDataloader():#BaseDataset):
 				self.label_regex = [re.compile(_) for _ in label_regex]
 				if len(self.label_regex) == 1:
 					self.label_regex = self.label_regex[0]
-				self.n_labels = len(self.label_regex)
+				self.n_labels = len(self.label_regex) + 1
 			else:
 				self.label_regex = re.compile(label_regex)
 				self.n_labels = 1
@@ -434,7 +434,7 @@ class CellDataloader():#BaseDataset):
 						warnings.warn(
 							("Image file %s matches at"+\
 							" least two regular expressions") % image_file)
-					m = i + 1
+					m = i
 			return m
 		else:
 			if bool(self.label_regex.search(image_file)):
