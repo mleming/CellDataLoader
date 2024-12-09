@@ -12,7 +12,7 @@ To install Cell Data Loader, simply type into a standard UNIX terminal
 
     pip install cell-data-loader
 
-To use Python, navigate to [example/CellDataLoaderPlayground.ipynb](https://github.com/mleming/CellDataLoader/blob/main/example/CellDataLoaderPlayground.ipynb), download it, and run it in [Jupyter Notebook](https://jupyterlab.readthedocs.io/en/stable/getting_started/installation.html). On a Mac, that may be run with the following command:
+To use a quick Jupyter Notebook example, navigate to [example/CellDataLoaderPlayground.ipynb](https://github.com/mleming/CellDataLoader/blob/main/example/CellDataLoaderPlayground.ipynb), download it, and run it in [Jupyter Notebook](https://jupyterlab.readthedocs.io/en/stable/getting_started/installation.html). On a Mac, that may be run with the following command:
 
 	python3 -m jupyterlab ~/Downloads/CellDataLoaderPlayground.ipynb
 
