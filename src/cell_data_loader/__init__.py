@@ -1,3 +1,3 @@
-__version__ = "0.0.19"
+__version__ = "0.0.20"
 
 from .cell_data_loader import *
