@@ -12,9 +12,8 @@ from scipy.ndimage.interpolation import map_coordinates
 from scipy.ndimage.filters import gaussian_filter
 from .base_dataset import BaseDataset
 import torch,torchvision
-torchvision.disable_beta_transforms_warning()
+#torchvision.disable_beta_transforms_warning()
 from .util import *
-import warnings
 
 
 #import openslide
