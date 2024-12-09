@@ -224,7 +224,7 @@ class CellDataloader():#BaseDataset):
 		self.augment_image = augment_image
 		self.normalize = normalize
 		if self.augment_image and self.dtype == "torch":
-			import torchvision.transforms.v2 as transforms
+			import torchvision.transforms as transforms
 			
 			self.augment = transforms.Compose([
 				transforms.RandomHorizontalFlip(0.5),
@@ -376,7 +376,7 @@ class CellDataloader():#BaseDataset):
 		else:
 			self.n_channels = n_channels
 		if self.normalize and self.dtype == "torch":
-			from torchvision.transforms.v2 import Normalize
+			from torchvision.transforms import Normalize
 			self.normalizer = Normalize(
 				tuple([0.5 for _ in range(self.n_channels)]),
 				tuple([0.5 for _ in range(self.n_channels)]))
