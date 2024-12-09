@@ -5,6 +5,9 @@ Cell Data Loader is a simple AI support tool in Python that can take in images o
 
 It can also be used for normal computer vision research, which is why CellPose is not a strict dependency.
 
+Quick Start
+-----------
+
 To install Cell Data Loader, simply type into a standard UNIX terminal
 
     pip install cell-data-loader
@@ -12,6 +15,10 @@ To install Cell Data Loader, simply type into a standard UNIX terminal
 To use Python, navigate to [example/CellDataLoaderPlayground.ipynb](https://github.com/mleming/CellDataLoader/blob/main/example/CellDataLoaderPlayground.ipynb), download it, and run it in [Jupyter Notebook](https://jupyterlab.readthedocs.io/en/stable/getting_started/installation.html). On a Mac, that may be run with the following command:
 
 	python3 -m jupyterlab ~/Downloads/CellDataLoaderPlayground.ipynb
+
+
+Python
+------
 
 The simplest way to use Cell Data Loader is to instantiate a dataloader as such:
 
