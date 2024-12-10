@@ -277,7 +277,16 @@ class CellDataloader():#BaseDataset):
 			assert(isinstance(label_regex,list) or isinstance(label_regex,str))
 			if isinstance(label_regex,list):
 				assert(len(label_regex) > 0)
-				self.label_regex = [re.compile(_) for _ in label_regex]
+				self.label_regex = []
+				for l in label_regex:
+					if isinstance(l,str):
+						self.label_regex.append(re.compile(l))
+					elif isinstance(l,list):
+						self.label_regex.append([re.compile(_) for _ in l])
+					else:
+						raise Exception(
+							f"Label regex {l} must be string or list"
+						)
 				if len(self.label_regex) == 1:
 					self.label_regex = self.label_regex[0]
 				self.n_labels = len(self.label_regex) + 1
@@ -329,6 +338,7 @@ class CellDataloader():#BaseDataset):
 		for j,all_filename_list in enumerate(all_filename_lists):
 			for i,filename in enumerate(all_filename_list):
 					if is_image_file(filename):
+						skip = False
 						imlabel = ImageLabelObject(filename,
 									gpu_ids=self.gpu_ids,
 									dtype=self.dtype,
@@ -338,6 +348,7 @@ class CellDataloader():#BaseDataset):
 							imlabel.label = j
 						elif self.label_input_format == "Regex":
 							imlabel.label = self.__matchitem__(filename)
+							if imlabel.label < 0: skip = True
 						elif self.label_input_format == "List":
 							imlabel.label = label_file_dict[filename]
 						elif self.label_input_format == "Cell_Box_Filelist":
@@ -345,6 +356,7 @@ class CellDataloader():#BaseDataset):
 						elif self.label_input_format == "Cell_Box_Regex":
 							raise Exception("Unimplemented")
 							imlabel.boxlabel = self.cell_im_regex(filename)
+						if skip: continue
 						self.image_objects.append(imlabel)
 		random.shuffle(self.image_objects)
 		if self.match_labels:
@@ -426,10 +438,15 @@ class CellDataloader():#BaseDataset):
 				Label input format must be regex, is currently %s
 				""" % self.label_input_format)
 		if isinstance(self.label_regex,list):
-			m = 0
+			m = -1
 			for i,reg in enumerate(self.label_regex):
-				if bool(reg.search(image_file)):
-					if m > 0:
+				if isinstance(reg,list):
+					expr = np.any(
+						[ bool(reg_.search(image_file)) for reg_ in reg ]
+					)
+				else: expr = bool(reg.search(image_file))
+				if expr:
+					if m > -1:
 						warnings.warn(
 							("Image file %s matches at"+\
 							" least two regular expressions") % image_file)
