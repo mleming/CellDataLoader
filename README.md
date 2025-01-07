@@ -126,29 +126,3 @@ dataloader = CellDataloader(imfolder,
 			)
 ~~~
 
-
-Dependencies
-------------
-
-Note that the strict dependencies are automatically downloaded just with
-
-	pip install cell-data-loader
-
-However, to get support with cell-segmentation-specific images (i.e., segment="cell"), [CellPose](https://github.com/MouseLand/cellpose) needs to be installed. GPU integration with CellPose would also need to be handled separately.
-
-Strict dependencies:
-
-	numpy
-	torch
-	torchvision
-	opencv-python>=4.5.4
-	slideio==2.4.1
-	scipy
-	scikit-image
-	pillow
-
-Soft dependencies:
-
-	CellPose # For cell segmentation support
-	Tensorflow
-
