@@ -100,6 +100,36 @@ class TestSimple(unittest.TestCase):
 				self.assertEqual(s[1],dim[0])
 				self.assertEqual(s[2],dim[1])
 				if i > 10: break
+
+	def test_split(self):
+		batch_size = 5
+		dim = (6,7)
+		for dtype in ["torch","numpy"]:
+			dataset = CellDataloader(imfolder3,dim=dim,batch_size=batch_size,
+				segment_image="cell",verbose=False,dtype=dtype,
+				channels_first=False,split=[[1,2,3],6])
+			for i,xy in enumerate(dataset):
+				s = xy.shape
+				self.assertEqual(s[0],batch_size)
+				self.assertEqual(s[1],dim[0])
+				self.assertEqual(s[2],dim[1])
+				if i > 10: break
+
+	def test_fname(self):
+		batch_size = 5
+		dim = (6,7)
+		for dtype in ["torch","numpy"]:
+			dataset = CellDataloader(imfolder3,dim=dim,batch_size=batch_size,
+				segment_image="whole",verbose=False,dtype=dtype,
+				channels_first=False,return_filenames=True)
+			for i,(xy,fname) in enumerate(dataset):
+				s = xy.shape
+				self.assertEqual(s[0],batch_size)
+				self.assertEqual(s[1],dim[0])
+				self.assertEqual(s[2],dim[1])
+				self.assertEqual(all([os.path.isfile(f) for f in fname]),True)
+				if i > 10: break
+
 	def test_channel_resample(self):
 		batch_size = 5
 		dim = (6,7)

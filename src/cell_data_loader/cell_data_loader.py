@@ -211,7 +211,8 @@ class CellDataloader():#BaseDataset):
 		channels_first = True,
 		match_labels=False,
 		normalize=True,
-		split = None):
+		split = None,
+		return_filenames = False):
 		
 		self.verbose = verbose
 		self.label_balance = label_balance
@@ -229,6 +230,7 @@ class CellDataloader():#BaseDataset):
 		self.channels_first = channels_first
 		self.augment_image = augment_image
 		self.normalize = normalize
+		self.return_filenames = return_filenames
 		if self.augment_image and self.dtype == "torch":
 			self.augment = transforms.Compose([
 				transforms.RandomHorizontalFlip(0.5),
@@ -343,14 +345,16 @@ class CellDataloader():#BaseDataset):
 			for i,filename in enumerate(all_filename_list):
 					if is_image_file(filename):
 						if split is not None:
-							s1 = split[0]
-							s2 = split[1]
+							s1 = split[0] # List of numbers
+							s2 = split[1] # Max number
 							assert isinstance(s1,list)
 							assert isinstance(s2,int)
 							assert all([isinstance(_,int) for _ in s1])
 							assert all([ _ < s2 for _ in s1])
 							assert all([ _ >= 0 for _ in s1])
-							if hashlib.sha256(filename.encode()) % s2 not in s1:
+							h = hashlib.sha256(filename.encode()).hexdigest()
+							h = int(h,16)
+							if h % s2 not in s1:
 								continue
 						skip = False
 						imlabel = ImageLabelObject(filename,
@@ -496,7 +500,8 @@ class CellDataloader():#BaseDataset):
 			raise StopIteration
 		#assert(len(self.image_objects[self.index]) > 0)
 		im = self.image_objects[self.index][self.im_index]
-		if self.return_labels(): label = self.image_objects[self.index].label
+		label = self.image_objects[self.index].label
+		fname = self.image_objects[self.index].filename
 		self.im_index += 1
 		while self.im_index >= len(self.image_objects[self.index]) or \
 				(len(self.image_objects[self.index]) == 0):
@@ -512,19 +517,19 @@ class CellDataloader():#BaseDataset):
 			#im = self.augment(im)
 			#im = torch.permute(im,list(range(1,len(imdim))) + [0])
 			#print("imdim: %s"%str(im.size()))
-		if self.return_labels():
-			return im,label
-		else:
-			return im
+		return im,label,fname
 	def __next__(self):
 		"""
 		Returns the next batch of images
 		"""
+		if self.return_filenames:
+			fnames = []
 		for i in range(self.batch_size):
 			if self.return_labels():
-				im,y = self.next_im()
+				im,y,fname = self.next_im()
+				
 				while isinstance(im,int) and im == -1:
-					im,y = self.next_im()
+					im,y,fname = self.next_im()
 				if self.n_labels == 0:
 					raise Exception(
 						"Cannot return labels with self.n_labels as 0")
@@ -535,9 +540,10 @@ class CellDataloader():#BaseDataset):
 						self.label_batch[i,j] = 0
 					self.label_batch[i,y] = 1
 			else:
-				im = self.next_im()
+				im,y,fname = self.next_im()
 				while isinstance(im,int) and im == -1:
-					im = self.next_im()
+					im,y,fname = self.next_im()
+			if self.return_filenames: fnames.append(fname)
 			assert(not isinstance(im,int))
 			if self.dtype == "torch":
 				if len(im.size()) == 2 and self.n_channels == 1:
@@ -573,7 +579,13 @@ class CellDataloader():#BaseDataset):
 					b = self.batch
 			else:
 				raise Exception("Unimplemented dtype: %s" % self.dtype)
+		if self.return_filenames: assert len(fnames) == self.batch_size
+		r = [b]
+		
 		if self.return_labels():
-			return b,self.label_batch
-		else:
-			return b
+			r.append(self.label_batch)
+		if self.return_filenames:
+			r.append(fnames)
+		if len(r) == 1: r = r[0]
+		else: r = tuple(r)
+		return r
