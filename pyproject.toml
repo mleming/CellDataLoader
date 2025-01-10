@@ -2,7 +2,7 @@
 
 name = "cell_data_loader"
 
-version = "0.0.29"
+version = "0.0.30"
 
 dependencies = [
   "numpy==1.22.0",

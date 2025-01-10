@@ -15,7 +15,6 @@ import torch,torchvision
 #torchvision.disable_beta_transforms_warning()
 from .util import *
 import torchvision.transforms as transforms
-import hashlib
 
 #import openslide
 #import czifile
@@ -352,8 +351,7 @@ class CellDataloader():#BaseDataset):
 							assert all([isinstance(_,int) for _ in s1])
 							assert all([ _ < s2 for _ in s1])
 							assert all([ _ >= 0 for _ in s1])
-							h = hashlib.sha256(filename.encode()).hexdigest()
-							h = int(h,16)
+							h = hash(filename)
 							if h % s2 not in s1:
 								continue
 						skip = False
