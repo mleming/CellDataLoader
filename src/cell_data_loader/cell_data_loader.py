@@ -14,7 +14,7 @@ from .base_dataset import BaseDataset
 import torch,torchvision
 #torchvision.disable_beta_transforms_warning()
 from .util import *
-
+import torchvision.transforms as transforms
 
 #import openslide
 #import czifile
@@ -164,7 +164,8 @@ class ImageLabelObject(BaseDataset):
 			raise Exception("Invalid mode: %s" % self.mode)
 	def __getitem__(self,index):
 		if self.mode == "whole":
-			return self.get_image()
+			im = self.get_image()
+			return im
 		elif self.mode == "sliced":
 			x_dim,y_dim = self.get_scaled_dims()
 			x = index % (x_dim)
@@ -186,6 +187,9 @@ class ImageLabelObject(BaseDataset):
 			raise Exception("Unimplemented")
 		else:
 			raise Exception("Invalid mode: %s" % self.mode)
+	def clear(self):
+		del self.image
+		self.image = None
 
 class CellDataloader():#BaseDataset):
 	def __init__(self,
@@ -224,8 +228,6 @@ class CellDataloader():#BaseDataset):
 		self.augment_image = augment_image
 		self.normalize = normalize
 		if self.augment_image and self.dtype == "torch":
-			import torchvision.transforms as transforms
-			
 			self.augment = transforms.Compose([
 				transforms.RandomHorizontalFlip(0.5),
 				transforms.RandomVerticalFlip(0.5),
@@ -486,6 +488,7 @@ class CellDataloader():#BaseDataset):
 		self.im_index += 1
 		while self.im_index >= len(self.image_objects[self.index]) or \
 				(len(self.image_objects[self.index]) == 0):
+			self.image_objects[self.index].clear()
 			self.im_index = 0
 			self.index += 1
 			if self.index >= len(self.image_objects): break
@@ -536,7 +539,7 @@ class CellDataloader():#BaseDataset):
 					if not self.channels_first:
 						b = torch.permute(b,[0,-1] + list(range(1,len(b.size())-1)))
 					#print("b.size(): %s" % str(b.size()))
-					if self.n_channels <= 3 and self.augment:
+					if self.n_channels <= 3 and self.augment_image:
 						b = self.augment(b)
 						if self.dim[0] > 32 and self.dim[1] > 32:
 							b = self.augment2(b)
