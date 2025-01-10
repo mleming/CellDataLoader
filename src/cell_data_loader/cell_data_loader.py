@@ -15,6 +15,7 @@ import torch,torchvision
 #torchvision.disable_beta_transforms_warning()
 from .util import *
 import torchvision.transforms as transforms
+import hashlib
 
 #import openslide
 #import czifile
@@ -209,7 +210,8 @@ class CellDataloader():#BaseDataset):
 		n_channels = None,
 		channels_first = True,
 		match_labels=False,
-		normalize=True):
+		normalize=True,
+		split = None):
 		
 		self.verbose = verbose
 		self.label_balance = label_balance
@@ -340,6 +342,16 @@ class CellDataloader():#BaseDataset):
 		for j,all_filename_list in enumerate(all_filename_lists):
 			for i,filename in enumerate(all_filename_list):
 					if is_image_file(filename):
+						if split is not None:
+							s1 = split[0]
+							s2 = split[1]
+							assert isinstance(s1,list)
+							assert isinstance(s2,int)
+							assert all([isinstance(_,int) for _ in s1])
+							assert all([ _ < s2 for _ in s1])
+							assert all([ _ >= 0 for _ in s1])
+							if hashlib.sha256(filename.encode()) % s2 not in s1:
+								continue
 						skip = False
 						imlabel = ImageLabelObject(filename,
 									gpu_ids=self.gpu_ids,
