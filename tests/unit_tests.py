@@ -64,6 +64,12 @@ class TestSimple(unittest.TestCase):
 			self.assertFalse(np.isnan(xy[0,0,0,0]))
 			break
 	
+	def test_sample_outputs(self):
+		dataset = CellDataloader(imfolder1,sample_output_folder="sample")
+		self.assertTrue(os.path.isdir("sample"))
+		for xy in dataset:
+			break
+		assert len(glob.glob(os.path.join("sample","*.png"))) > 1
 	def test_different_folder_inputs(self):
 		dataset = CellDataloader(imfolder1,verbose=False)
 		self.assertEqual(dataset.label_input_format,"None")

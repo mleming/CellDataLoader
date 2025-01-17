@@ -211,7 +211,8 @@ class CellDataloader():#BaseDataset):
 		match_labels=False,
 		normalize=True,
 		split = None,
-		return_filenames = False):
+		return_filenames = False,
+		sample_output_folder = None):
 		
 		self.verbose = verbose
 		self.label_balance = label_balance
@@ -230,6 +231,8 @@ class CellDataloader():#BaseDataset):
 		self.augment_image = augment_image
 		self.normalize = normalize
 		self.return_filenames = return_filenames
+		self.sample_output_folder = sample_output_folder
+		
 		if self.augment_image and self.dtype == "torch":
 			self.augment = transforms.Compose([
 				transforms.RandomHorizontalFlip(0.5),
@@ -420,6 +423,13 @@ class CellDataloader():#BaseDataset):
 				self.n_channels))
 		else:
 			raise Exception("Unimplemented dtype: %s" % self.dtype)
+		
+		if self.sample_output_folder is not None:
+			if self.verbose:
+				print("Initiating sample output folder at %s" % \
+					self.sample_output_folder)
+			os.makedirs(self.sample_output_folder,exist_ok=True)
+			self.imcount = 0
 	def sort_to_match_labels(self):
 		assert(self.match_labels)
 		if not self.return_labels():
@@ -579,7 +589,30 @@ class CellDataloader():#BaseDataset):
 				raise Exception("Unimplemented dtype: %s" % self.dtype)
 		if self.return_filenames: assert len(fnames) == self.batch_size
 		r = [b]
-		
+		if self.sample_output_folder is not None:
+			for i in range(b.size()[0]):
+				out_file_name = os.path.join(self.sample_output_folder,
+					"%.8d" % self.imcount)
+				if self.return_labels():
+					out_file_name = "%s_%s" % (out_file_name,
+												str(self.label_batch[i]))
+				if self.return_filenames:
+					out_file_name = "%s_%s" % (out_file_name,
+						os.path.basename(os.path.splitext(fnames[i])[0]))
+				out_file_name = "%s.png" % out_file_name
+				self.imcount += 1
+				im = b[i,...]
+				im = im - im.min()
+				if im.max() > 0:
+					im = im / im.max()
+				if self.dtype == "torch":
+					im = im.cpu().detach().numpy()
+				if self.channels_first:
+					im = np.moveaxis(im, 0, -1)
+				im = im * 255
+				im = im.astype(np.uint8)
+				Image.fromarray(im).save(out_file_name)
+				
 		if self.return_labels():
 			r.append(self.label_batch)
 		if self.return_filenames:
