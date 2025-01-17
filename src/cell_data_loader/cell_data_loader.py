@@ -594,8 +594,8 @@ class CellDataloader():#BaseDataset):
 				out_file_name = os.path.join(self.sample_output_folder,
 					"%.8d" % self.imcount)
 				if self.return_labels():
-					out_file_name = "%s_%s" % (out_file_name,
-												str(self.label_batch[i]))
+					out_file_name = "%s_%d" % (out_file_name,
+										int(np.argmax(self.label_batch[i])))
 				if self.return_filenames:
 					out_file_name = "%s_%s" % (out_file_name,
 						os.path.basename(os.path.splitext(fnames[i])[0]))
@@ -612,7 +612,7 @@ class CellDataloader():#BaseDataset):
 				im = im * 255
 				im = im.astype(np.uint8)
 				Image.fromarray(im).save(out_file_name)
-				
+				del im
 		if self.return_labels():
 			r.append(self.label_batch)
 		if self.return_filenames:

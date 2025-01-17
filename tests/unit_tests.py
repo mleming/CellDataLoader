@@ -65,11 +65,15 @@ class TestSimple(unittest.TestCase):
 			break
 	
 	def test_sample_outputs(self):
-		dataset = CellDataloader(imfolder1,sample_output_folder="sample")
-		self.assertTrue(os.path.isdir("sample"))
-		for xy in dataset:
-			break
-		assert len(glob.glob(os.path.join("sample","*.png"))) > 1
+		for k in ["whole","sliced","cell"]:
+			dataset = CellDataloader(imfolder1,imfolder2,
+				sample_output_folder="sample_%s" % k,
+				normalize=False,augment_image=False,segment_image=k)
+			self.assertTrue(os.path.isdir("sample_%s" % k))
+			for xy in dataset:
+				continue
+			assert len(glob.glob(os.path.join("sample_%s" % k,"*.png"))) > 1
+
 	def test_different_folder_inputs(self):
 		dataset = CellDataloader(imfolder1,verbose=False)
 		self.assertEqual(dataset.label_input_format,"None")
