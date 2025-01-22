@@ -15,7 +15,7 @@ import torch,torchvision
 #torchvision.disable_beta_transforms_warning()
 from .util import *
 import torchvision.transforms as transforms
-
+import gc
 #import openslide
 #import czifile
 try:
@@ -188,8 +188,14 @@ class ImageLabelObject(BaseDataset):
 		else:
 			raise Exception("Invalid mode: %s" % self.mode)
 	def clear(self):
+		print(self.filename)
 		del self.image
+		del self.boxlabel
+		gc.collect()
 		self.image = None
+		self.boxlabel = None
+		gc.collect()
+		print("Collectimundo")
 
 class CellDataloader():#BaseDataset):
 	def __init__(self,
@@ -212,7 +218,8 @@ class CellDataloader():#BaseDataset):
 		normalize=True,
 		split = None,
 		return_filenames = False,
-		sample_output_folder = None):
+		sample_output_folder = None,
+		save_ram = False):
 		
 		self.verbose = verbose
 		self.label_balance = label_balance
@@ -232,15 +239,16 @@ class CellDataloader():#BaseDataset):
 		self.normalize = normalize
 		self.return_filenames = return_filenames
 		self.sample_output_folder = sample_output_folder
+		self.save_ram = save_ram
 		
 		if self.augment_image and self.dtype == "torch":
 			self.augment = transforms.Compose([
 				transforms.RandomHorizontalFlip(0.5),
-				transforms.RandomVerticalFlip(0.5),
-				transforms.GaussianBlur(5),
-				transforms.ColorJitter(brightness=(0.5,1.5),
-					contrast=(1), saturation=(0.5,1.5), hue=(-0.1,0.1)),
-				transforms.RandomResizedCrop(self.dim, antialias=True)])#,
+				transforms.RandomVerticalFlip(0.5)])
+				#transforms.GaussianBlur(5),
+				#transforms.ColorJitter(brightness=0.1,
+				#	contrast=0.1, saturation=0.1, hue=0.1),
+				#transforms.RandomResizedCrop(self.dim, antialias=True)])#,
 				#transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))])
 			self.augment2 = transforms.Compose([
 				transforms.ElasticTransform()])
@@ -513,7 +521,8 @@ class CellDataloader():#BaseDataset):
 		self.im_index += 1
 		while self.im_index >= len(self.image_objects[self.index]) or \
 				(len(self.image_objects[self.index]) == 0):
-			self.image_objects[self.index].clear()
+			if self.save_ram:
+				self.image_objects[self.index].clear()
 			self.im_index = 0
 			self.index += 1
 			if self.index >= len(self.image_objects): break
@@ -594,8 +603,12 @@ class CellDataloader():#BaseDataset):
 				out_file_name = os.path.join(self.sample_output_folder,
 					"%.8d" % self.imcount)
 				if self.return_labels():
-					out_file_name = "%s_%d" % (out_file_name,
+					if self.dtype == "numpy":
+						out_file_name = "%s_%d" % (out_file_name,
 										int(np.argmax(self.label_batch[i])))
+					elif self.dtype == "torch":
+						out_file_name = "%s_%d" % (out_file_name,
+									int(torch.argmax(self.label_batch[i])))
 				if self.return_filenames:
 					out_file_name = "%s_%s" % (out_file_name,
 						os.path.basename(os.path.splitext(fnames[i])[0]))
