@@ -415,6 +415,8 @@ def merge_predicted_and_annotated(annotated_boxes,predicted_boxes,min_dice=0.5):
 	return np.concatenate((annotated_boxes,intersected_boxes),axis=0)
 
 def get_average_mask_size(mask):
+	m = mask.max()
+	if m == 0: return 0
 	return np.sum(mask.flatten() > 0) / mask.max()
 
 def renumber_masks(mask):

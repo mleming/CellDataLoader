@@ -31,8 +31,10 @@ class ImageLabelObject(BaseDataset):
 			dtype="torch",
 			gpu_ids="",
 			dim=(64,64),
-			n_channels = None):
+			n_channels = None,
+			filename_label = None):
 		self.filename = filename
+		self.filename_label = filename_label
 		self.image = None
 		self.label = None
 		self.boxlabel = None
@@ -53,7 +55,12 @@ class ImageLabelObject(BaseDataset):
 			return "czi"
 		else:
 			raise Exception("Image type unsupported: %s" % ext)
-	def get_image(self):
+	def get_image(self,read_filename_label=False):
+		if read_filename_label:
+			temp = self.image
+			tempf = self.filename
+			self.image = self.image2
+			self.filename = self.filename_label
 		if self.image is None:
 			if self.im_type() == "regular":
 				self.image = cv2.imread(self.filename)
@@ -99,7 +106,9 @@ class ImageLabelObject(BaseDataset):
 			if len(self.image.shape) != 3:
 				self.image = np.expand_dims(self.image,axis=2)
 				assert(len(self.image.shape) == 3)
-			if self.n_channels is not None and \
+			if read_filename_label:
+				self.filename_label_channels = self.image.shape[2]
+			elif self.n_channels is not None and \
 					self.image.shape[2] != self.n_channels:
 				self.image = resample(self.image,
 					self.n_channels,axis=2)
@@ -110,6 +119,19 @@ class ImageLabelObject(BaseDataset):
 				assert(len(self.image.shape) == 3)
 			else:
 				raise Exception("Unimplemented dtype: %s" % self.dtype)
+
+			if read_filename_label:
+				if self.dtype == "torch":
+					assert(self.image.size()[0] == temp.size()[0])
+					assert(self.image.size()[1] == temp.size()[1])
+					self.image = torch.cat((temp,self.image),dim=2)
+				elif self.dtype == "numpy":
+					assert(self.image.shape[0] == temp.shape[0])
+					assert(self.image.shape[1] == temp.shape[1])
+					self.image = np.concatenate((temp,self.image),axis=2)
+				self.filename = tempf
+			elif self.filename_label is not None:
+				self.get_image(read_filename_label = True)
 		return self.image
 	def get_cell_box_label(self):
 		if self.boxlabel is None:
@@ -165,14 +187,12 @@ class ImageLabelObject(BaseDataset):
 	def __getitem__(self,index):
 		if self.mode == "whole":
 			im = self.get_image()
-			return im
 		elif self.mode == "sliced":
 			x_dim,y_dim = self.get_scaled_dims()
 			x = index % (x_dim)
 			y = (index // (x_dim)) % (y_dim)
-			imslice = self.get_image()[x * self.dim[0]:(x+1)*self.dim[0],
+			im = self.get_image()[x * self.dim[0]:(x+1)*self.dim[0],
 				y * self.dim[1]:(y+1)*self.dim[1],...]
-			return imslice
 		elif self.mode == "cell":
 			if len(self.get_cell_box_label()) == 0:
 				#print("len self: %d" % len(self))
@@ -182,20 +202,17 @@ class ImageLabelObject(BaseDataset):
 				#return -1
 			index = index % len(self.get_cell_box_label())
 			x,y,l,w = self.get_cell_box_label()[index]
-			return slice_and_augment(self.get_image(),x,y,l,w,
+			im = slice_and_augment(self.get_image(),x,y,l,w,
 				out_size=self.dim)
-			raise Exception("Unimplemented")
 		else:
 			raise Exception("Invalid mode: %s" % self.mode)
+		return im
 	def clear(self):
-		print(self.filename)
 		del self.image
 		del self.boxlabel
 		gc.collect()
 		self.image = None
 		self.boxlabel = None
-		gc.collect()
-		print("Collectimundo")
 
 class CellDataloader():#BaseDataset):
 	def __init__(self,
