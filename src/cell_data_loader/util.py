@@ -74,6 +74,55 @@ def elastic_transform(im, alpha, sigma, alph_af, rand_s=None):
 	
 	return map_coordinates(im,indices,order=1,mode='reflect').reshape(shape)
 
+def get_dim_str(filename: str = None,
+		X_dim: tuple = None,
+		outtype: str = ".npy") -> str:
+	"""Converts an input filename to the filename of the cached .npy file
+	
+	Given an input filename (e.g. /path/to/myfile.nii.gz) with a given dimension
+	(e.g. (96,48,48)), converts the filepath to the cached version (e.g.
+	/path/to/myfile_resized_96_48_48.npy). Perfect cube dimensions are annotated
+	with a single number rather than three. If no filename is input, the
+	string itself is returned (resized_96_48_48.npy).
+	
+	Args:
+		filename (str): Name of the file to be converted (Default None)
+		X_dim (tuple): Size that the image is going to be resized to (Default None)
+		outtype (str): 
+	
+	Returns:
+		String of the cached image file, or a string that can be added to a filename
+	
+	"""
+	
+	assert(X_dim is not None)
+	if max(X_dim) == min(X_dim):
+		dim_str = str(X_dim[0])
+	else:
+		dim_str = "_".join([str(_) for _ in X_dim])
+	if filename is not None:
+		base,ext1 = os.path.splitext(filename)
+		base,ext2 = os.path.splitext(base)
+		if outtype == ".npy":
+			if filename.endswith(f"resized_{dim_str}.npy"):
+				return filename
+			elif ext1.lower() == ".npy":
+				foo = re.sub("resized_[0-9].*.npy$",
+						f"resized_{dim_str}.npy",filename)
+				return foo
+			return "%s_resized_%s.npy" % (base,dim_str)
+		elif outtype == "dicom":
+			return os.path.dirname(filename)
+		else:
+			assert(outtype[0] == ".")
+			if filename.endswith(f"_resized_{dim_str}.npy"):
+				return filename.replace(f"_resized_{dim_str}.npy",outtype)
+			else:
+				return filename.replace(ext2+ext1,outtype)
+	else:
+		return dim_str
+
+
 def slice_and_augment(im,x,y,l,w,
 		trans = None,
 		out_size = None,
@@ -725,13 +774,19 @@ def get_predicted_labels(imagename,single_cell_pred_model_filepath='.',
 		Y = get_verify(X,Y[:,:len(lb.classes_) + 8])
 		return np.concatenate((boxes,Yl,Y),axis=1),masks
 
-def read_in_csv(labels):
+def read_in_csv(labels,exclude_top=False,int_conv = True):
 	if isinstance(labels,str) and os.path.isfile(labels):
 		foo = []
 		with open(labels,'r') as fileobj:
 			csvreader = csv.reader(fileobj)
 			for row in csvreader:
-				foo.append(row)
+				if exclude_top and is_float(row[0]):
+					if int_conv:
+						foo.append(
+							[(r if not is_float(r) else int(r)) for r in row]
+						)
+					else:
+						foo.append(row)
 		labels = foo
 	return labels
 

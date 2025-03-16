@@ -27,6 +27,552 @@ except:
 class ImageLabelObject(BaseDataset):
 	def __init__(self,
 			filename,
+			mode : str = "whole",
+			gpu_ids : str = "",
+			dim : tuple = (64,64),
+			slice_size : tuple = None,
+			n_channels = None,
+			filename_label : str = None, # For segmentation labels
+			static_inputs : list = [],
+			database = None,
+			dtype : str = "torch",
+			extra_info_list : list = None,
+			y_on_c : bool = False,
+			cache : bool = True,
+			Y_dim : tuple = (1,32),
+			C_dim : tuple = (16,32),
+			y_nums : list = None,
+			c_nums : list = None,
+			file_to_label_regex : tuple = None):
+
+		super().__init__()
+		self.filename = filename
+		self.filename_label = filename_label
+		self.database = None
+		self.image = None
+		self.label = None
+		self.boxlabel = None
+		self.mode = mode
+		if self.mode not in ["whole","cell","sliced"]:
+			raise ValueError(f"Invalid mode: {self.mode}")
+		self.dtype = dtype
+		self.image_type = None
+		self.dim = dim
+		if 1 in self.dim and len(self.dim) == 3 and \
+				self.im_type() in ["czi","svs","regular"]:
+			new_dim = self.dim
+			new_dim = list(self.dim)
+			new_dim.remove(1)
+			new_dim = tuple(new_dim)
+			warnings.warn(f"Image type is {self.im_type()} -- converting self.dim from {self.dim} to {new_dim}")
+			self.dim = new_dim
+		elif len(self.dim) == 3:
+			if self.im_type() in ["czi","svs","regular"]:
+				raise ValueError("Filetype can only have 2D image but tuple"+\
+				" is 3D — check to make sure that channels is set in"+\
+				" n_channels")
+		self.slice_size = slice_size
+		if self.mode == "sliced":
+			if self.slice_size is None:
+				self.slice_size = self.dim
+			else:
+				if not (len(self.slice_size) == len(dim)):
+					raise ValueError("Slice size dimensions must be same "+\
+						"as the image dimension")
+				if not (all([self.slice_size[i] <= dim[i] \
+					for i in range(len(self.slice_size))])):
+					raise ValueError("Slice size dimensions must be less"+\
+						" or equal to  the image dimension")
+		self.gpu_ids = gpu_ids
+		self.n_channels = n_channels
+		self.label_filename = None
+		self.file_to_label_regex = file_to_label_regex
+		if self.file_to_label_regex is not None:
+			if not (isinstance(self.file_to_label_regex,tuple) and\
+				len(self.file_to_label_regex) == 2 and \
+				isinstance(self.file_to_label_regex[0],str) and \
+				isinstance(self.file_to_label_regex[1],str)):
+				raise ValueError("file_to_label_regex must be a tuple of two"+\
+				" strings. It replaces the filename with the label file of "+\
+				"interest.")
+		
+		self.npy_file = get_dim_str(self.filename,self.dim)
+		self.dtype = dtype
+		self.Y_dim = Y_dim
+		self.C_dim = C_dim
+		self.y_on_c = y_on_c # Adds the Y value to the C array as well
+				
+		self.X = None
+		self.Y = None
+		self.C = None
+		self.y_nums = y_nums
+		self.c_nums = c_nums
+		self.json_file = None
+		self.augment = False
+
+		self.loaded = False
+		if self.database is not None:
+			if self.npy_file in self.database.database:
+				self.load_extra_info()
+		
+		self.times_called = 0
+		self.cache = cache
+
+	def im_type(self,cache=True):
+		if not cache: self.image_type = None
+		if self.image_type is None:
+			if os.path.isdir(self.filename):
+				self.image_type = "dicom_folder"
+			elif os.path.isfile(self.filename):
+				name,ext = os.path.splitext(self.filename)
+				name = name.lower()
+				ext = ext.lower()
+				if ext == ".npy":
+					self.image_type = "npy"
+				elif ext  == ".nii":
+					self.image_type = "nifti"
+				elif ext == ".gz" and os.path.splitext(name)[1] == ".nii":
+					self.image_type = "nifti"
+				elif ext == ".dcm":
+					self.image_type = "dicom"
+				elif ext in [".png",".jpg",".jpeg",".tiff",".tif"]:
+					self.image_type = "regular"
+				elif ext in [".svs"]:
+					self.image_type = "svs"
+				elif ext in [".czi"]:
+					self.image_type = "czi"
+				else:
+					raise Exception(
+					"Not implemented for extension %s" % ext)
+			elif os.path.isfile(
+				get_dim_str(self.filename,
+						dim=self.dim,
+						outtype='.nii.gz')):
+				self.filename = get_dim_str(self.filename,
+							dim=self.dim,
+							outtype='.nii.gz')
+				return self.im_type()
+			elif os.path.isfile(
+				get_dim_str(self.filename,
+						dim=self.dim,
+						outtype='.nii')):
+				self.filename = get_dim_str(self.filename,
+							dim=self.dim,
+							outtype='.nii')
+				return self.im_type()
+			elif os.path.isdir(get_dim_str(self.filename,
+							dim=self.dim,
+							outtype='dicom')):
+				self.filename = get_dim_str(self.filename,
+							dim=self.dim,
+							outtype='dicom')
+				return self.im_type()
+			else:
+				if not os.path.isfile(self.filename) and not os.path.isdir(self.filename):
+					raise FileNotFoundError(f"{self.filename} does not exist")
+				else:
+					raise Exception(f"No valid image type for {self.filename}")
+		return self.image_type
+		
+	def get_image(self,read_filename_label=False):
+		if read_filename_label:
+			temp = self.image
+			tempf = self.filename
+			self.image = self.image2
+			self.filename = self.filename_label
+		if self.image is None:
+			if self.im_type() == "regular":
+				self.image = cv2.imread(self.filename)
+			#elif self.im_type() == "svs":
+				#n = openslide.OpenSlide(self.filename)
+				#levels = n.level_dimensions
+				#level=len(levels)-1
+				#width0,height0 = levels[level]
+				#self.image = n.read_region((0,0),level,(width0,height0))
+				#self.image = np.array(self.image)
+			elif self.im_type() == "czi" or self.im_type() == "svs":
+				#https://towardsdatascience.com/slideio-a-new-python-library-for-reading-medical-images-11858a522059
+				#self.image = czifile.imread(self.filename)
+				try:
+					self.image = slideio.open_slide(self.filename,
+						self.im_type().upper())
+				except:
+					raise Exception(
+						"SVS/CZI read on %s failed -- check slideio install" %\
+						self.filename
+					)
+				n_scenes = self.image.num_scenes
+				self.image = self.image.get_scene(n_scenes-1)
+				self.image = self.image.read_block(
+					slices=(0,self.image.num_z_slices)
+				)
+				self.image = np.squeeze(self.image)
+				#self.image = np.moveaxis(self.image,0,-1)
+			
+			elif self.im_type() in ["dicom_folder","nifti","npy","dicom"]:
+				if self.im_type() == "dicom_folder":
+					assert os.path.isdir(self.filename), f"Dicom Folder doesn't exist {self.filename}"
+					self.filename,self.json_file = compile_dicom(self.filename,
+					db_builder=self.database)
+					self.npy_file = get_dim_str(self.filename,self.dim)
+					assert(os.path.isfile(self.filename))
+					assert(os.path.isfile(self.json_file))
+					self.image_type = None
+				if self.npy_file != get_dim_str(self.filename,self.dim):
+						print("Error: %s != %s" % ( self.npy_file,get_dim_str(self.filename,self.dim)))
+				assert(self.npy_file == get_dim_str(self.filename,self.dim))
+				if self.cache and os.path.isfile(os.path.realpath(self.npy_file)):
+					self.image = np.load(os.path.realpath(self.npy_file))
+				elif self.im_type() == "nifti":
+					self.image = nb.load(os.path.realpath(self.filename)).get_fdata()
+				elif self.im_type() == "npy":
+					self.image = np.load(os.path.realpath(self.filename))
+				elif self.im_type() == "dicom":
+					self.image = dicom.dcmread(os.path.realpath(self.filename)).pixel_array
+				else:
+					print("Error in %s" % self.filename)
+					print("Error in %s" % self.npy_file)
+					raise Exception("Unsupported image type: %s"%self.im_type())
+				if self.mode == "whole":
+					self.image = resize_np(self.image,self.dim)
+				if self.cache and not os.path.isfile(os.path.realpath(self.npy_file)):
+					np.save(self.npy_file,self.image)
+				if self.database is not None:
+					self.database.add_json(nifti_file=self.filename)
+			else:
+				raise Exception(f"No valid imtype for {self.filename}")
+			assert self.image is not None, f"Image not read in: {self.filename}"
+			
+			if self.image.dtype != np.uint8:
+				self.image = self.image.astype(np.uint8)
+			if self.mode == "whole" and self.im_type() == "regular":
+				self.image = cv2.resize(self.image,self.dim[::-1])
+				assert(not np.isnan(self.image[0,0,0]))
+			elif self.mode == "whole" and self.im_type() in ["czi","svs"]:
+				#self.image = resize(self.image,self.dim)
+				self.image = cv2.resize(self.image,self.dim[::-1])
+			if len(self.image.shape) < 3:
+				self.image = np.expand_dims(self.image,axis=2)
+			s = self.image.shape
+			assert(len(s) == 3)
+			if s[0] < s[1] and s[0] < s[2]:
+				self.image = np.moveaxis(self.image,0,-1)
+			if len(self.image.shape) != 3:
+				self.image = np.expand_dims(self.image,axis=2)
+				assert(len(self.image.shape) == 3)
+			if read_filename_label:
+				self.filename_label_channels = self.image.shape[2]
+			elif self.n_channels is not None and \
+					self.image.shape[2] != self.n_channels:
+				self.image = resample(self.image,
+					self.n_channels,axis=2)
+			if self.mode == "whole":
+				if self.dtype == "torch":
+					self.image = torch.tensor(self.image)
+					assert(len(self.image.size()) == 3)
+				elif self.dtype == "numpy":
+					assert(len(self.image.shape) == 3)
+				else:
+					raise Exception("Unimplemented dtype: %s" % self.dtype)
+
+			if read_filename_label:
+				if self.dtype == "torch":
+					assert(self.image.size()[0] == temp.size()[0])
+					assert(self.image.size()[1] == temp.size()[1])
+					self.image = torch.cat((temp,self.image),dim=2)
+				elif self.dtype == "numpy":
+					assert(self.image.shape[0] == temp.shape[0])
+					assert(self.image.shape[1] == temp.shape[1])
+					self.image = np.concatenate((temp,self.image),axis=2)
+				self.filename = tempf
+			elif self.filename_label is not None:
+				self.get_image(read_filename_label = True)
+		#-----
+
+		return self.image
+
+	def get_mem(self) -> float:
+		"""Estimates the memory of the larger objects stored in ImageLabelObject"""
+		
+		if self.image is None:
+			return 0
+		elif self.dtype == "torch":
+			return self.image.element_size() * self.image.nelement()
+		elif self.dtype == "numpy":
+			return np.prod(self.image.shape) * \
+				np.dtype(self.image.dtype).itemsize
+		else:
+			raise Exception("Invalid dtype: %s" % self.dtype)
+
+	def clear_image(self):
+		"""Clears the array data from main memory"""
+		
+		del self.X
+		del self.C
+		del self.Y
+		self.X = None
+		self.Y = None
+		self.C = None
+
+	def get_cell_box_label(self):
+		if self.boxlabel is None:
+			self.boxlabel,_ = get_cell_boxes_from_image(self.get_image())
+		return self.boxlabel
+
+	def get_n_channels(self):
+		if self.n_channels is not None:
+			return self.n_channels
+		s = self.get_orig_size()
+		if len(s) == 2: return 1
+		s_sorted = sorted(s,reverse=True)
+		return s_sorted[2]
+	def get_label_filename(self):
+		if self.label_filename is None and self.file_to_label_regex is not None:
+			self.label_filename = \
+				re.sub(self.file_to_label_regex[0],
+					self.file_to_label_regex[1],self.filename,count=1)
+		return self.label_filename
+
+	def read_box_label(self,box_label_file=None):
+		if box_label_file is None:
+			box_label_file = self.get_label_filename()
+		if not os.path.isfile(box_label_file):
+			raise FileNotFoundError("Label file %s not found" % box_label_file)
+		if not (os.path.splitext(box_label_file)[1].lower() == ".csv"):
+			raise ValueError("Label file %s is not a CSV" % box_label_file)
+		self.boxlabel = read_in_csv(box_label_file,exclude_top = True)
+
+	def __len__(self):
+		if self.mode == "whole":
+			return 1
+		elif self.mode == "sliced":
+			x,y = self.get_scaled_dims()
+			return x*y
+		elif self.mode == "cell":
+			return len(self.get_cell_box_label())
+		else:
+			raise Exception("Invalid mode: %s" % self.mode)
+
+	def get_orig_dims(self):
+		s = self.get_orig_size()
+		if len(s) == 3: return s
+		s_sorted = sorted(s,reverse=True)
+		x,y = s_sorted[0],s_sorted[1]
+		if x == y: return x,y
+		if s.index(x) > s.index(y):
+			return y,x
+		else:
+			return x,y
+
+	def get_scaled_dims(self):
+		orig_dims = self.get_orig_dims()
+		assert(orig_dims is not None)
+		assert(len(orig_dims) == 2 or len(orig_dims) == 3)
+		assert(self.slice_size is not None)
+		assert len(self.slice_size) <= len(orig_dims), f"len(self.slice_size) != len(orig_dims) ({len(self.slice_size)} != {len(orig_dims)}); self.slice_size = {self.slice_size}, orig_dims = {orig_dims}"
+		return [(orig_dims[i] // self.slice_size[i]) for i in range(len(self.slice_size))]
+		#x,y = self.get_orig_dims()
+		#return x // self.dim[0], y // self.dim[1]
+
+	def get_orig_size(self):
+		im = self.get_image()
+		if isinstance(im, np.ndarray):
+			s = im.shape
+		elif torch.is_tensor(im):
+			s = im.size()
+		else:
+			raise Exception("Unimplemented dtype")
+		return s
+
+	def __getitem__(self,index):
+		if self.mode == "whole":
+			im = self.get_image()
+		elif self.mode == "sliced":
+			d = self.get_scaled_dims()
+			if len(d) == 2:
+				dim,y_dim = self.get_scaled_dims()
+				x = index % (dim)
+				y = (index // (dim)) % (y_dim)
+				im = self.get_image()[
+					x * self.slice_size[0]:(x+1)*self.slice_size[0],
+					y * self.slice_size[1]:(y+1)*self.slice_size[1],...]
+				im = cv2.resize(im,self.dim[::-1])
+			elif len(d) == 3:
+				dim,y_dim,z_dim = self.get_scaled_dims()
+				x = index % (dim)
+				y = (index // (dim)) % (y_dim)
+				z = (index // (dim * y_dim)) % (z_dim)
+				im = self.get_image()[
+					x * self.slice_size[0]:(x+1)*self.slice_size[0],
+					y * self.slice_size[1]:(y+1)*self.slice_size[1],
+					z * self.slice_size[2]:(z+1)*self.slice_size[2],...]
+				im = resize_np(im,self.dim)
+			else:
+				raise Exception("Invalid number of dimensions: %d" % len(d))
+			if self.dtype == "torch":
+				im = torch.tensor(im)
+		elif self.mode == "cell":
+			if len(self.get_cell_box_label()) == 0:
+				#print("len self: %d" % len(self))
+				return -1
+				#raise Exception("No cells in this image — should not call")
+				#warnings.warn("No cells found in %s" % self.filename)
+				#return -1
+			index = index % len(self.get_cell_box_label())
+			x,y,l,w = self.get_cell_box_label()[index][:4]
+			if len(self.get_cell_box_label()[index]) > 4:
+				self.label = self.get_cell_box_label()[index][4]
+			im = slice_and_augment(self.get_image(),x,y,l,w,
+				out_size=self.dim)
+		else:
+			raise Exception("Invalid mode: %s" % self.mode)
+		return im
+
+	def clear(self):
+		del self.image
+		del self.boxlabel
+		gc.collect()
+		self.image = None
+		self.boxlabel = None
+
+	def get_X(self,augment=False):
+		"""Reads in and returns the image, with the option to augment"""
+		
+		if self.X is None:
+			self.get_image()
+		self.load_extra_info()
+		self.times_called += 1
+		if augment and self.dtype == "torch":
+			return generate_transforms(self.X)
+		else: return self.X
+	def get_X_files(self):
+		return self.npy_file
+	def _get_Y(self,label=None):
+		"""Returns label"""
+		
+		if self.y_nums is not None:
+			if label is None:
+				return self.y_nums
+			else:
+				return [self.y_nums[self.database.labels.index(label)]]
+		
+		self.y_nums = self.database.get_label_encode(self.npy_file)
+		if label is None:
+			return self.y_nums
+		else:
+			return [self.y_nums[self.database.labels.index(label)]]
+	
+	def _get_C(self,confound=None,return_lim=False):
+		"""Returns confound array"""
+		if confound is not None:
+			cc = self.database.confounds.index(confound)
+		if self.c_nums is not None:
+			if confound is None:
+				if return_lim:
+					return self.c_nums,self.c_lims
+				else: return self.c_nums
+			else:
+				if return_lim:
+					return [self.c_nums[cc]],[self.c_lims[cc]]
+				else: [self.c_nums[cc]]
+		if return_lim:
+			self.c_nums,self.c_lims = self.database.get_confound_encode(
+										self.npy_file,
+										return_lim=True)
+			if confound is None:
+				return self.c_nums,self.c_lims
+			else:
+				return [self.c_nums[cc]],[self.c_lims[cc]]
+		else:
+			self.c_nums = self.database.get_confound_encode(self.npy_file)
+			if confound is None:
+				return self.c_nums
+			else: return [self.c_nums[cc]]
+		
+	def get_Y(self,label=None):
+		if self.Y is not None and label is None:
+			return self.Y
+		y_nums = self._get_Y(label=label)
+		if self.dtype == "numpy":
+			self.Y = np.zeros(self.Y_dim)
+		elif self.dtype == "torch":
+			self.Y = torch.zeros(self.Y_dim)
+		for i,j in enumerate(y_nums):
+			self.Y[i,j] = 1
+		return self.Y
+	def get_C(self,confound=None,return_lim=False):
+		if self.C is not None and confound is None:
+			return self.C
+		if return_lim:
+			c_nums,c_lims = self._get_C(confound=confound,return_lim=True)
+			if np.sum(c_lims) + (0 if self.y_on_c else len(self._get_Y())) > self.C_dim[0]:
+				print(np.sum(c_lims) + (0 if self.y_on_c else len(self._get_Y())))
+				print(self.C_dim)
+				assert(np.sum(c_lims) + (0 if self.y_on_c else len(self._get_Y())) <= self.C_dim[0])
+		else:
+			c_nums = self._get_C(confound=confound)
+		if self.dtype == "numpy":
+			self.C = np.zeros(self.C_dim)
+		elif self.dtype == "torch":
+			self.C = torch.zeros(self.C_dim)
+		if return_lim:
+			k = 0
+			for i,j in enumerate(c_nums):
+				for _ in range(c_lims[i]):
+					self.C[k,j] = 1
+					k += 1
+			if self.y_on_c:
+				y_nums = self._get_Y()
+				for i,j in enumerate(y_nums):
+					self.C[k,j] = 1
+					k += 1
+			return self.C
+		else:
+			for i,j in enumerate(c_nums):
+				self.C[i,j] = 1
+			if self.y_on_c:
+				y_nums = self._get_Y()
+				for i,j in enumerate(y_nums):
+					self.C[i+len(self.database.confounds),j] = 1
+			return self.C
+		
+	def get_C_dud(self,confound=None,return_lim = False):
+		"""Returns an array of duds with the same dimensionality as C
+		
+		Returns an array of duds with the same dimensionality as C but with all
+		values set to the first choice. Used in training the regressor. If
+		y_on_c is set to True, this replicates the Y array on the bottom rows of
+		the array."""
+		
+		if self.dtype == "numpy":
+			C_dud = np.zeros(self.C_dim)
+		elif self.dtype == "torch":
+			C_dud = torch.zeros(self.C_dim)
+		
+		if return_lim:
+			c_nums,c_lims = self._get_C(return_lim=True)
+			k = 0
+			y_nums = self._get_Y()
+			for i,j in enumerate(c_nums):
+				for l in range(c_lims[i]):
+					C_dud[k,l] = 1
+					k += 1
+			
+			for i,j in enumerate(y_nums):
+				C_dud[k,j] = 1
+				k += 1
+		else:
+			C_dud[:len(self.database.confounds),0] = 1
+			if self.y_on_c:
+				y_nums = self._get_Y()
+				for i,j in enumerate(y_nums):
+					C_dud[i+len(self.database.confounds),j] = 1
+		return C_dud
+
+
+class ImageLabelObject_old(BaseDataset):
+	def __init__(self,
+			filename,
 			mode="whole",
 			dtype="torch",
 			gpu_ids="",
@@ -188,9 +734,9 @@ class ImageLabelObject(BaseDataset):
 		if self.mode == "whole":
 			im = self.get_image()
 		elif self.mode == "sliced":
-			x_dim,y_dim = self.get_scaled_dims()
-			x = index % (x_dim)
-			y = (index // (x_dim)) % (y_dim)
+			dim,y_dim = self.get_scaled_dims()
+			x = index % (dim)
+			y = (index // (dim)) % (y_dim)
 			im = self.get_image()[x * self.dim[0]:(x+1)*self.dim[0],
 				y * self.dim[1]:(y+1)*self.dim[1],...]
 		elif self.mode == "cell":
@@ -236,7 +782,8 @@ class CellDataloader():#BaseDataset):
 		split = None,
 		return_filenames = False,
 		sample_output_folder = None,
-		save_ram = False):
+		save_ram = False,
+		file_to_label_regex = None):
 		
 		self.verbose = verbose
 		self.label_balance = label_balance
@@ -257,6 +804,7 @@ class CellDataloader():#BaseDataset):
 		self.return_filenames = return_filenames
 		self.sample_output_folder = sample_output_folder
 		self.save_ram = save_ram
+		self.file_to_label_regex = file_to_label_regex
 		
 		if self.augment_image and self.dtype == "torch":
 			self.augment = transforms.Compose([
@@ -362,6 +910,8 @@ class CellDataloader():#BaseDataset):
 								raise Exception(
 									"File doesn't exist: %s" % filename)
 				self.label_input_format = "Cell_Box_Filelist"
+			elif self.file_to_label_regex is not None:
+				self.label_input_format = "File_To_Label_Regex"
 		
 		"""
 		Reads in and determines makeup of image folder
@@ -387,7 +937,8 @@ class CellDataloader():#BaseDataset):
 									gpu_ids=self.gpu_ids,
 									dtype=self.dtype,
 									dim=self.dim,
-									mode=self.segment_image)
+									mode=self.segment_image,
+									file_to_label_regex = self.file_to_label_regex)
 						if self.label_input_format == "Folder":
 							imlabel.label = j
 						elif self.label_input_format == "Regex":
@@ -398,8 +949,10 @@ class CellDataloader():#BaseDataset):
 						elif self.label_input_format == "Cell_Box_Filelist":
 							imlabel.read_box_label(self.cell_box_filelist[j][i])
 						elif self.label_input_format == "Cell_Box_Regex":
-							raise Exception("Unimplemented")
-							imlabel.boxlabel = self.cell_im_regex(filename)
+							#raise Exception("Unimplemented")
+							imlabel.label_filename = self.cell_im_regex(filename)
+						#elif self.label_input_format == "File_To_Label_Regex":
+						#	imlabel.file_to_label_regex = self.file_to_label_regex
 						if skip: continue
 						self.image_objects.append(imlabel)
 		random.shuffle(self.image_objects)
@@ -552,6 +1105,7 @@ class CellDataloader():#BaseDataset):
 			#im = torch.permute(im,list(range(1,len(imdim))) + [0])
 			#print("imdim: %s"%str(im.size()))
 		return im,label,fname
+	
 	def __next__(self):
 		"""
 		Returns the next batch of images
@@ -578,10 +1132,15 @@ class CellDataloader():#BaseDataset):
 				while isinstance(im,int) and im == -1:
 					im,y,fname = self.next_im()
 			if self.return_filenames: fnames.append(fname)
-			assert(not isinstance(im,int))
+			assert not isinstance(im,int)
 			if self.dtype == "torch":
-				if len(im.size()) == 2 and self.n_channels == 1:
-					im = torch.unsqueeze(im,2)
+				if not torch.is_tensor(im):
+					im = torch.tensor(im)
+				try:
+					if len(im.size()) == 2 and self.n_channels == 1:
+						im = torch.unsqueeze(im,2)
+				except TypeError:
+					raise Exception("Unknown type: %s" % str(im))
 				self.batch[i,...] = torch.unsqueeze(im,0)
 				if self.channels_first:
 					b = torch.moveaxis(self.batch,-1,1)

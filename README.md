@@ -80,17 +80,20 @@ for label,image in dataloader:
 Boxes
 -----
 
-In cases where you need to cut out individual cells from an image and have the coordinates file, cell_data_loader.py accepts an argument, cell_box_filelist, which is a list of files corresponding to the inputs that mark out the coordinates of labels on the cells. The format of the csv is as follows:
+In cases where you need to cut out individual cells from an image and have the coordinates file, cell_data_loader.py accepts an argument, file_to_label_regex, which is a regex that translates image file names into the paths of CSVs that correspond to the inputs that mark out the coordinates of labels on the cells. The format of the csv is as follows:
 
 | X  | Y   | W  | H | Label |
 | -  | -   | -  | - | ----- |
 | 14 | 13  | 5  | 6 | 0     |
 | 20 | 25  | 15 | 5 | 1     |
 
+The file_to_label_regex is represented as a tuple of two regexes — a matching and a replacement expression. So if an image is named '/path/to/AF647-1.tif' and a label file is named '/path/to/For_DL_AF647-1.csv', the following expression would be appropriate:
 
 ~~~python
-dataloader = CellDataloader('/path/to/file.svs',cell_box_filelist=['/path/to/boxfile.csv'])
+dataloader = CellDataloader('/path/to/AF647-1.tif',file_to_label_regex=((r'%s([^%s+]*).tif' % (os.sep,os.sep),r'%sFor_DL_\1.csv' % os.sep)))
 ~~~
+
+
 
 Arguments
 ---------

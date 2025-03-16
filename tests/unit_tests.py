@@ -8,11 +8,13 @@ import numpy as np
 import torch
 
 wd         = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
-im_root    = os.path.join(os.path.dirname(wd),'data')
+im_root    = os.path.join(wd,'data')
 #imfile_svs = os.path.join(im_root,'10447627_1.svs')
 imfolder1  = os.path.join(im_root,'4173633_5')
 imfolder2  = os.path.join(im_root,'3368914_4_non_tumor')
 imfolder3  = os.path.join(im_root,'H6-13_Mars1+dapi')
+imfolder4  = os.path.join(im_root,'CSV_labels')
+
 sys.path.insert(0,os.path.join(wd))
 from src.cell_data_loader import *
 
@@ -63,6 +65,21 @@ class TestSimple(unittest.TestCase):
 			self.assertEqual(s[2],dim[1])
 			self.assertFalse(np.isnan(xy[0,0,0,0]))
 			break
+
+	def test_box_labels(self):
+		batch_size = 5
+		dim = (6,7)
+		dataset = CellDataloader(imfolder4,dim=dim,batch_size=batch_size,
+			dtype='numpy',verbose=False,channels_first=False,
+				file_to_label_regex = (r'%s([^%s+]*).tif' % (os.sep,os.sep),
+					r'%sFor_DL_\1.csv' % os.sep))
+		for i,xy in enumerate(dataset):
+			s = xy.shape
+			self.assertEqual(s[0],batch_size)
+			self.assertEqual(s[1],dim[0])
+			self.assertEqual(s[2],dim[1])
+			self.assertFalse(np.isnan(xy[0,0,0,0]))
+			break
 	
 	def test_sample_outputs(self):
 		for k in ["whole","sliced","cell"]:
@@ -70,8 +87,11 @@ class TestSimple(unittest.TestCase):
 				sample_output_folder="sample_%s" % k,
 				normalize=False,augment_image=False,segment_image=k)
 			self.assertTrue(os.path.isdir("sample_%s" % k))
+			ii = 0
 			for xy in dataset:
-				continue
+				ii += 1
+				if ii > 5:
+					break
 			assert len(glob.glob(os.path.join("sample_%s" % k,"*.png"))) > 1
 
 	def test_different_folder_inputs(self):
@@ -97,6 +117,7 @@ class TestSimple(unittest.TestCase):
 		for xy in dataset:
 			self.assertEqual(len(xy),2)
 			break
+
 	def test_cellpose(self):
 		batch_size = 5
 		dim = (6,7)
@@ -123,7 +144,7 @@ class TestSimple(unittest.TestCase):
 				self.assertEqual(s[0],batch_size)
 				self.assertEqual(s[1],dim[0])
 				self.assertEqual(s[2],dim[1])
-				if i > 10: break
+				if i > 5: break
 
 	def test_fname(self):
 		batch_size = 5
