@@ -2,7 +2,7 @@
 
 name = "cell_data_loader"
 
-version = "0.0.36"
+version = "0.0.37"
 
 
 dependencies = [
@@ -13,7 +13,8 @@ dependencies = [
   "opencv-python>=4.5.4",
   "slideio==2.4.1",
   "scikit-image",
-  "pillow"
+  "pillow",
+  "cellpose==3.1.0"
 ]
 requires-python = ">=3.8"
 
