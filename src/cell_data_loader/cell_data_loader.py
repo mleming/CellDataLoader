@@ -117,7 +117,8 @@ class ImageLabelObject(BaseDataset):
 		
 		self.times_called = 0
 		self.cache = cache
-
+	
+	# Determines the type of input image and whether it is a valid one
 	def im_type(self,cache=True):
 		if not cache: self.image_type = None
 		if self.image_type is None:
