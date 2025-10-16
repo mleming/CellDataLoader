@@ -2,11 +2,11 @@
 
 name = "cell_data_loader"
 
-version = "0.0.37"
+version = "0.0.39"
 
 
 dependencies = [
-  "numpy>=1.22.0",
+  "numpy==1.22.0",
   "scipy",
   "torch>=2.0.0",
   "torchvision",
