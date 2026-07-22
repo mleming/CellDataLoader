@@ -15,7 +15,7 @@ import torch,torchvision
 #torchvision.disable_beta_transforms_warning()
 from .util import *
 import torchvision.transforms as transforms
-import gc
+import gc, hashlib
 #import openslide
 #import czifile
 try:
@@ -23,6 +23,16 @@ try:
 except:
 	warnings.warn("""No valid slideio installed, SVS and CZI files cannot 
 		be read in -- run `pip install slideio` for support""")
+
+def hash_det(input_string: str) -> int:
+    # 1. Encode string to bytes
+    byte_data = input_string.encode('utf-8')
+    
+    # 2. Generate SHA-256 hex string
+    hex_digest = hashlib.sha256(byte_data).hexdigest()
+    
+    # 3. Convert hex string to base-10 integer
+    return int(hex_digest, 16)
 
 class ImageLabelObject(BaseDataset):
 	def __init__(self,
@@ -930,7 +940,7 @@ class CellDataloader():#BaseDataset):
 							assert all([isinstance(_,int) for _ in s1])
 							assert all([ _ < s2 for _ in s1])
 							assert all([ _ >= 0 for _ in s1])
-							h = hash(filename)
+							h = hash_det(filename)
 							if h % s2 not in s1:
 								continue
 						skip = False
