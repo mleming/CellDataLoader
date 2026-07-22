@@ -2,7 +2,7 @@
 
 name = "cell_data_loader"
 
-version = "0.0.40"
+version = "0.0.41"
 
 
 dependencies = [
@@ -14,7 +14,8 @@ dependencies = [
   "slideio==2.4.1",
   "scikit-image",
   "pillow",
-  "cellpose==3.1.0"
+  "cellpose==3.1.0",
+  "hashlib"
 ]
 requires-python = ">=3.8"
 
