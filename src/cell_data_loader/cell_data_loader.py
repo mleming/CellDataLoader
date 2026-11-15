@@ -49,6 +49,13 @@ def _load_nifti(path):
 			np.asanyarray(img.dataobj)).astype(np.float32)
 	return img.get_fdata()
 
+def _nifti_header_layout(path):
+	"""(channels per voxel, number of spatial axes) from the header alone"""
+	img = nb.load(path) # lazy: reads the header, not the image data
+	dt = img.get_data_dtype()
+	k = len(dt.names) if dt.names is not None else 1 # RGB24/RGBA32 records
+	return k * int(np.prod(img.shape[3:])), min(len(img.shape), 3)
+
 class ImageLabelObject(BaseDataset):
 	def __init__(self,
 			filename,
@@ -1072,6 +1079,9 @@ class CellDataloader():#BaseDataset):
 						#	imlabel.file_to_label_regex = self.file_to_label_regex
 						if skip: continue
 						self.image_objects.append(imlabel)
+		if self.volumetric:
+			self.image_objects = self._drop_unusable_volumes(
+				self.image_objects,n_channels)
 		random.shuffle(self.image_objects)
 		if self.match_labels:
 			self.sort_to_match_labels()
@@ -1140,6 +1150,44 @@ class CellDataloader():#BaseDataset):
 					self.sample_output_folder)
 			os.makedirs(self.sample_output_folder,exist_ok=True)
 			self.imcount = 0
+	def _drop_unusable_volumes(self,objs,n_channels):
+		"""Skips NIfTIs that can't be volumes with the expected channel count
+
+		Checks headers only, so it's fast. Catches files that would otherwise
+		crash training partway through an epoch, like RGB secondary captures,
+		4D diffusion series and 2D images. If n_channels is None, the most
+		common channel count among the NIfTIs is used.
+		"""
+		layouts = {}
+		for obj in objs:
+			if obj.im_type() == "nifti":
+				layouts[id(obj)] = _nifti_header_layout(obj.filename)
+		if not layouts:
+			return objs
+		target = n_channels
+		if target is None:
+			counts = [ch for ch,_ in layouts.values()]
+			target = max(set(counts),key=counts.count)
+		keep,skipped = [],[]
+		for obj in objs:
+			if id(obj) not in layouts:
+				keep.append(obj)
+				continue
+			ch,n_spatial = layouts[id(obj)]
+			if n_spatial < len(self.dim):
+				skipped.append(f"  2D image: {obj.filename}")
+			elif ch != target:
+				skipped.append(f"  {ch} channels: {obj.filename}")
+			else:
+				keep.append(obj)
+		if skipped:
+			warnings.warn(f"Skipping {len(skipped)} file(s) that aren't "+\
+				f"{target}-channel volumes:\n" + "\n".join(skipped))
+		if not keep:
+			raise ValueError(f"No {target}-channel volumes left after "+\
+				"skipping incompatible files")
+		return keep
+
 	def sort_to_match_labels(self):
 		assert(self.match_labels)
 		if not self.return_labels():
