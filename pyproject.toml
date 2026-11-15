@@ -14,15 +14,16 @@ dependencies = [
   "slideio==2.4.1",
   "scikit-image",
   "pillow",
-  "cellpose==3.1.0"
+  "cellpose==3.1.0",
+  "nibabel"
 ]
 requires-python = ">=3.8"
 
 authors = [
-  {name = "Matt Leming", email = "mleming@mgh.harvard.edu"}
+  {name = "Matt Leming", email = "mleming@surescaneds.com"}
 ]
 maintainers = [
-  {name = "Matt Leming", email = "mleming@mgh.harvard.edu"}
+  {name = "Matt Leming", email = "mleming@surescaneds.com"}
 ]
 
 description = "Converts general images of cells into formats and labels for deep learning pipelines"

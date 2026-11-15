@@ -16,6 +16,7 @@ import torch,torchvision
 from .util import *
 import torchvision.transforms as transforms
 import gc, hashlib
+import nibabel as nb
 #import openslide
 #import czifile
 try:
@@ -33,6 +34,20 @@ def hash_det(input_string: str) -> int:
     
     # 3. Convert hex string to base-10 integer
     return int(hex_digest, 16)
+
+def _load_nifti(path):
+	"""Reads a NIfTI as a float array, including RGB24/RGBA32 files.
+
+	RGB NIfTIs store each voxel as an (R,G,B[,A]) record, which get_fdata()
+	can't convert to float. Those come back with a trailing channel axis,
+	e.g. (256,256,28) RGB -> (256,256,28,3).
+	"""
+	img = nb.load(path)
+	if img.get_data_dtype().names is not None:
+		from numpy.lib import recfunctions as rfn
+		return rfn.structured_to_unstructured(
+			np.asanyarray(img.dataobj)).astype(np.float32)
+	return img.get_fdata()
 
 class ImageLabelObject(BaseDataset):
 	def __init__(self,
@@ -53,7 +68,8 @@ class ImageLabelObject(BaseDataset):
 			C_dim : tuple = (16,32),
 			y_nums : list = None,
 			c_nums : list = None,
-			file_to_label_regex : tuple = None):
+			file_to_label_regex : tuple = None,
+			volumetric : bool = False):
 
 		super().__init__()
 		self.filename = filename
@@ -81,6 +97,15 @@ class ImageLabelObject(BaseDataset):
 				raise ValueError("Filetype can only have 2D image but tuple"+\
 				" is 3D — check to make sure that channels is set in"+\
 				" n_channels")
+		# volumetric=True: every axis in dim is spatial (e.g. 256x256x3 is a
+		# 3-slice volume, not an RGB image). Channels go on a trailing axis.
+		self.volumetric = volumetric
+		if self.volumetric:
+			if len(self.dim) != 3:
+				raise ValueError(f"volumetric=True needs a 3D dim, got {self.dim}")
+			if self.im_type() in ["czi","svs","regular"]:
+				raise ValueError(f"volumetric=True is not supported for "+\
+					f"{self.im_type()} files")
 		self.slice_size = slice_size
 		if self.mode == "sliced":
 			if self.slice_size is None:
@@ -232,10 +257,27 @@ class ImageLabelObject(BaseDataset):
 				if self.npy_file != get_dim_str(self.filename,self.dim):
 						print("Error: %s != %s" % ( self.npy_file,get_dim_str(self.filename,self.dim)))
 				assert(self.npy_file == get_dim_str(self.filename,self.dim))
-				if self.cache and os.path.isfile(os.path.realpath(self.npy_file)):
-					self.image = np.load(os.path.realpath(self.npy_file))
+				cache_path = os.path.realpath(self.npy_file)
+				cache_is_source = cache_path == os.path.realpath(self.filename)
+				stale_cache = False
+				if self.cache and os.path.isfile(cache_path):
+					self.image = np.load(cache_path)
+					# Cache names collide across dims, e.g. (64,64) and (64,64,64)
+					# both map to *_resized_64.npy, so check the shape
+					if self.mode == "whole" and not cache_is_source and \
+							not self._cached_shape_ok(self.image):
+						expected = f"{tuple(self.dim)} plus a channel axis" \
+							if self.volumetric else f"{tuple(self.dim)}"
+						warnings.warn(f"Cached {self.npy_file} has shape "+\
+							f"{self.image.shape}, expected {expected} (made by a "+\
+							"run with a different dim or volumetric setting); "+\
+							"rebuilding it from the source file")
+						self.image = None
+						stale_cache = True
+				if self.image is not None:
+					pass
 				elif self.im_type() == "nifti":
-					self.image = nb.load(os.path.realpath(self.filename)).get_fdata()
+					self.image = _load_nifti(os.path.realpath(self.filename))
 				elif self.im_type() == "npy":
 					self.image = np.load(os.path.realpath(self.filename))
 				elif self.im_type() == "dicom":
@@ -245,8 +287,12 @@ class ImageLabelObject(BaseDataset):
 					print("Error in %s" % self.npy_file)
 					raise Exception("Unsupported image type: %s"%self.im_type())
 				if self.mode == "whole":
-					self.image = resize_np(self.image,self.dim)
-				if self.cache and not os.path.isfile(os.path.realpath(self.npy_file)):
+					if self.volumetric:
+						self.image = self._resize_volume(self.image)
+					else:
+						self.image = resize_np(self.image,self.dim)
+				if self.cache and not cache_is_source and \
+						(stale_cache or not os.path.isfile(cache_path)):
 					np.save(self.npy_file,self.image)
 				if self.database is not None:
 					self.database.add_json(nifti_file=self.filename)
@@ -254,35 +300,59 @@ class ImageLabelObject(BaseDataset):
 				raise Exception(f"No valid imtype for {self.filename}")
 			assert self.image is not None, f"Image not read in: {self.filename}"
 			
-			if self.image.dtype != np.uint8:
-				self.image = self.image.astype(np.uint8)
+			if self.im_type() in ["regular","czi","svs"]:
+				if self.image.dtype != np.uint8:
+					self.image = self.image.astype(np.uint8)
+			else:
+				# NIfTI/NPY/DICOM: resize_np scales to [0,1], so a uint8 cast
+				# here would truncate almost every voxel to 0. Keep floats.
+				self.image = self.image.astype(np.float32)
+				lo,hi = self.image.min(),self.image.max()
+				if lo < 0 or hi > 1:
+					self.image = (self.image - lo) / (hi - lo if hi > lo else 1)
 			if self.mode == "whole" and self.im_type() == "regular":
 				self.image = cv2.resize(self.image,self.dim[::-1])
 				assert(not np.isnan(self.image[0,0,0]))
 			elif self.mode == "whole" and self.im_type() in ["czi","svs"]:
 				#self.image = resize(self.image,self.dim)
 				self.image = cv2.resize(self.image,self.dim[::-1])
-			if len(self.image.shape) < 3:
-				self.image = np.expand_dims(self.image,axis=2)
-			s = self.image.shape
-			assert(len(s) == 3)
-			if s[0] < s[1] and s[0] < s[2]:
-				self.image = np.moveaxis(self.image,0,-1)
-			if len(self.image.shape) != 3:
-				self.image = np.expand_dims(self.image,axis=2)
-				assert(len(self.image.shape) == 3)
-			if read_filename_label:
-				self.filename_label_channels = self.image.shape[2]
-			elif self.n_channels is not None and \
-					self.image.shape[2] != self.n_channels:
-				self.image = resample(self.image,
-					self.n_channels,axis=2)
+			if self.volumetric:
+				# All axes of dim are spatial; add a trailing channel axis
+				if self.image.ndim == len(self.dim):
+					self.image = self.image[...,np.newaxis]
+				if self.image.ndim != len(self.dim) + 1:
+					raise ValueError(f"{self.filename} has shape "+\
+						f"{self.image.shape}; expected {len(self.dim)} spatial "+\
+						"axes (+ optional channel axis). If it was loaded from a "+\
+						f"stale cache, delete {self.npy_file} and rerun.")
+				if read_filename_label:
+					self.filename_label_channels = self.image.shape[-1]
+				elif self.n_channels is not None and \
+						self.image.shape[-1] != self.n_channels:
+					raise ValueError(f"{self.filename} has "+\
+						f"{self.image.shape[-1]} channels, expected {self.n_channels}")
+			else:
+				if len(self.image.shape) < 3:
+					self.image = np.expand_dims(self.image,axis=2)
+				s = self.image.shape
+				assert(len(s) == 3)
+				if s[0] < s[1] and s[0] < s[2]:
+					self.image = np.moveaxis(self.image,0,-1)
+				if len(self.image.shape) != 3:
+					self.image = np.expand_dims(self.image,axis=2)
+					assert(len(self.image.shape) == 3)
+				if read_filename_label:
+					self.filename_label_channels = self.image.shape[2]
+				elif self.n_channels is not None and \
+						self.image.shape[2] != self.n_channels:
+					self.image = resample(self.image,
+						self.n_channels,axis=2)
 			if self.mode == "whole":
 				if self.dtype == "torch":
 					self.image = torch.tensor(self.image)
-					assert(len(self.image.size()) == 3)
+					assert(len(self.image.size()) == self._n_axes())
 				elif self.dtype == "numpy":
-					assert(len(self.image.shape) == 3)
+					assert(len(self.image.shape) == self._n_axes())
 				else:
 					raise Exception("Unimplemented dtype: %s" % self.dtype)
 
@@ -301,6 +371,32 @@ class ImageLabelObject(BaseDataset):
 		#-----
 
 		return self.image
+
+	def _n_axes(self):
+		"""Rank of a stored image: spatial axes + one channel axis"""
+		return len(self.dim) + 1 if self.volumetric else 3
+
+	def _cached_shape_ok(self,im):
+		"""Whether a cached whole-mode array was made with this dim"""
+		n = len(self.dim)
+		if tuple(im.shape[:n]) != tuple(self.dim):
+			return False
+		if self.volumetric:
+			return im.ndim == n + 1
+		return im.ndim == n
+
+	def _resize_volume(self,im):
+		"""Resizes each channel of a volume to self.dim; returns (*dim, C)"""
+		if im.ndim == len(self.dim) + 1:
+			# Scale all channels together first so resize_np doesn't stretch
+			# each one to [0,1] separately (which would distort RGB color)
+			im = im.astype(np.float32)
+			lo,hi = im.min(),im.max()
+			if lo < 0 or hi > 1:
+				im = (im - lo) / (hi - lo if hi > lo else 1)
+			return np.stack([resize_np(im[...,ch],self.dim)
+				for ch in range(im.shape[-1])],axis=-1)
+		return resize_np(im,self.dim)[...,np.newaxis]
 
 	def get_mem(self) -> float:
 		"""Estimates the memory of the larger objects stored in ImageLabelObject"""
@@ -334,6 +430,7 @@ class ImageLabelObject(BaseDataset):
 		if self.n_channels is not None:
 			return self.n_channels
 		s = self.get_orig_size()
+		if self.volumetric: return s[-1]
 		if len(s) == 2: return 1
 		s_sorted = sorted(s,reverse=True)
 		return s_sorted[2]
@@ -357,8 +454,7 @@ class ImageLabelObject(BaseDataset):
 		if self.mode == "whole":
 			return 1
 		elif self.mode == "sliced":
-			x,y = self.get_scaled_dims()
-			return x*y
+			return int(np.prod(self.get_scaled_dims()))
 		elif self.mode == "cell":
 			return len(self.get_cell_box_label())
 		else:
@@ -366,6 +462,7 @@ class ImageLabelObject(BaseDataset):
 
 	def get_orig_dims(self):
 		s = self.get_orig_size()
+		if self.volumetric: return tuple(s[:-1])
 		if len(s) == 3: return s
 		s_sorted = sorted(s,reverse=True)
 		x,y = s_sorted[0],s_sorted[1]
@@ -417,7 +514,10 @@ class ImageLabelObject(BaseDataset):
 					x * self.slice_size[0]:(x+1)*self.slice_size[0],
 					y * self.slice_size[1]:(y+1)*self.slice_size[1],
 					z * self.slice_size[2]:(z+1)*self.slice_size[2],...]
-				im = resize_np(im,self.dim)
+				if self.volumetric:
+					im = self._resize_volume(im)
+				else:
+					im = resize_np(im,self.dim)
 			else:
 				raise Exception("Invalid number of dimensions: %d" % len(d))
 			if self.dtype == "torch":
@@ -794,7 +894,8 @@ class CellDataloader():#BaseDataset):
 		return_filenames = False,
 		sample_output_folder = None,
 		save_ram = False,
-		file_to_label_regex = None):
+		file_to_label_regex = None,
+		volumetric = False):
 		
 		self.verbose = verbose
 		self.label_balance = label_balance
@@ -816,6 +917,10 @@ class CellDataloader():#BaseDataset):
 		self.sample_output_folder = sample_output_folder
 		self.save_ram = save_ram
 		self.file_to_label_regex = file_to_label_regex
+		self.volumetric = volumetric
+		if self.volumetric and self.augment_image:
+			warnings.warn("volumetric=True: the 2D flip/elastic augmentations "+\
+				"are skipped for 3D batches")
 		
 		if self.augment_image and self.dtype == "torch":
 			self.augment = transforms.Compose([
@@ -949,7 +1054,8 @@ class CellDataloader():#BaseDataset):
 									dtype=self.dtype,
 									dim=self.dim,
 									mode=self.segment_image,
-									file_to_label_regex = self.file_to_label_regex)
+									file_to_label_regex = self.file_to_label_regex,
+									volumetric = self.volumetric)
 						if self.label_input_format == "Folder":
 							imlabel.label = j
 						elif self.label_input_format == "Regex":
@@ -991,6 +1097,19 @@ class CellDataloader():#BaseDataset):
 				self.label_batch = torch.zeros((self.batch_size,self.n_labels),
 					device = self.gpu_ids)
 		sample = self.image_objects[0]
+		if len(self.dim) == 3 and not self.volumetric and \
+				sample.im_type() in ["nifti","npy","dicom","dicom_folder"]:
+			if n_channels is not None and n_channels != self.dim[2]:
+				# Without volumetric, the third axis is treated as channels and
+				# resampled to n_channels, flattening each volume into 2D
+				raise ValueError(f"dim={tuple(self.dim)} with n_channels="+\
+					f"{n_channels} and volumetric=False would squash the third "+\
+					f"axis ({self.dim[2]}) into {n_channels} channel(s), turning "+\
+					"each volume into one 2D image. Pass volumetric=True to keep "+\
+					"3D volumes, or use a 2D dim if you want 2D images.")
+			warnings.warn(f"dim={tuple(self.dim)} has 3 entries but volumetric="+\
+				"False, so the last axis will be treated as channels. Pass "+\
+				"volumetric=True to keep it as a spatial (depth) axis.")
 		if n_channels is None:
 			self.n_channels = sample.get_n_channels()
 		else:
@@ -1004,11 +1123,13 @@ class CellDataloader():#BaseDataset):
 			image_object.n_channels = self.n_channels
 		if self.verbose:
 			print("%d Channels Detected" % self.n_channels)
+		# Batch is (B, *spatial, C); 2D keeps the old (B, H, W, C) layout
+		spatial = tuple(self.dim) if self.volumetric else tuple(self.dim[:2])
 		if self.dtype == "torch":
-			self.batch = torch.zeros(self.batch_size,self.dim[0],self.dim[1],
+			self.batch = torch.zeros(self.batch_size,*spatial,
 				self.n_channels,device=self.gpu_ids)
 		elif self.dtype == "numpy":
-			self.batch = np.zeros((self.batch_size,self.dim[0],self.dim[1],
+			self.batch = np.zeros((self.batch_size,*spatial,
 				self.n_channels))
 		else:
 			raise Exception("Unimplemented dtype: %s" % self.dtype)
@@ -1161,14 +1282,19 @@ class CellDataloader():#BaseDataset):
 					if not self.channels_first:
 						b = torch.permute(b,[0,-1] + list(range(1,len(b.size())-1)))
 					#print("b.size(): %s" % str(b.size()))
-					if self.n_channels <= 3 and self.augment_image:
+					if self.n_channels <= 3 and self.augment_image and \
+							not self.volumetric:
 						b = self.augment(b)
 						if self.dim[0] > 32 and self.dim[1] > 32:
 							b = self.augment2(b)
 					#print("b.size(): %s" % str(b.size()))
 					#print([0]+list(range(2,len(b.size()))) + [1])
 					if self.normalize:
-						b = self.normalizer(b)
+						if self.volumetric:
+							# Same as Normalize(0.5,0.5) but works on 5D tensors
+							b = (b - 0.5) / 0.5
+						else:
+							b = self.normalizer(b)
 					if not self.channels_first:
 						b = torch.permute(b,[0]+list(range(2,len(b.size()))) + [1])
 					#print("b.size(): %s" % str(b.size()))

@@ -281,7 +281,8 @@ def read_label_file(label_file):
 
 def is_image_file(filename):
 	basename,ext = os.path.splitext(filename)
-	return ext.lower() in [".jpg",".png",".jpeg",".czi",".svs",".tiff",".tif"]
+	_,ext2 = os.path.splitext(basename)
+	return ext.lower() in [".jpg",".png",".jpeg",".czi",".svs",".tiff",".tif",".nii"] or (ext.lower() == ".gz" and ext2.lower() == ".nii")
 
 def is_label_file(filename):
 	return True
@@ -871,6 +872,39 @@ def get_folder_classification(folderpath,get_total=False,get_everything = False)
 	for r in all_results:
 		all_results[r] = float(np.mean(all_results[r]))
 	return all_results
+
+# Resizes and standardizes 3d numpy arrays to normalized dimensions
+def resize_np(nifti_data,dim):
+	if nifti_data.min() < 0 or nifti_data.max() > 1:
+		# Not in-place: callers may pass a view of a cached image
+		nifti_data = nifti_data - nifti_data.min()
+		m = nifti_data.max()
+		if m > 0: # constant images would otherwise become NaN
+			nifti_data = nifti_data / m
+	if nifti_data.dtype != np.float32:
+		nifti_data = nifti_data.astype(np.float32)
+	if len(nifti_data.shape) != len(dim):
+		nifti_data = np.squeeze(nifti_data)
+		if len(nifti_data.shape) < len(dim):
+			# Averaging would only make this worse (e.g. a stale 2D cache
+			# loaded for a 3D dim), so fail with a clear message instead.
+			raise ValueError(f"resize_np: array of shape {nifti_data.shape} "+\
+				f"has fewer axes than dim={tuple(dim)}. If it came from a "+\
+				"cached *_resized_*.npy file made with a different dim, "+\
+				"delete that file.")
+		if len(nifti_data.shape) > len(dim):
+			# This is where an (H,W,D) volume loses its last axis when dim is
+			# 2D: the last axis is treated like color channels and averaged.
+			warnings.warn(f"resize_np: array of shape {nifti_data.shape} has "+\
+				f"more axes than dim={tuple(dim)}; averaging over the last axis. "+\
+				"To keep it as a spatial axis, pass a dim with one entry per "+\
+				"axis (e.g. (H,W,D)) and volumetric=True.")
+			nifti_data = np.squeeze(np.mean(nifti_data,axis=-1))
+		assert len(nifti_data.shape) == len(dim), f"nifti data of shape ({nifti_data.shape}) cannot be reshaped to dim ({dim}); different number of dimensions"
+	if nifti_data.shape != tuple(dim):
+		zp = [dim[i]/nifti_data.shape[i] for i in range(len(dim))]
+		nifti_data = ndimage.zoom(nifti_data,zp)
+	return nifti_data
 
 
 def get_file_list_from_str(obj):

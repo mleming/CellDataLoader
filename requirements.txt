@@ -6,3 +6,4 @@ slideio==2.4.1
 scipy
 scikit-image
 pillow
+nibabel
